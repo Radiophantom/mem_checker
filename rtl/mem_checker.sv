@@ -1,6 +1,6 @@
 import settings_pkg::*;
 
-module top_module(
+module mem_checker(
   input                                 rst_i,
   input                                 clk_sys_i,
   input                                 clk_ctrl_i,
@@ -32,4 +32,4 @@ module top_module(
 
 
 
-endmodule
+endmodule : mem_checker

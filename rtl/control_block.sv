@@ -1,12 +1,13 @@
 import settings_pkg::*;
 
 module control_block(
-  input                         rst_i
+  input                         rst_i,
   input                         clk_i,
 
   input                         start_test_i,
 
   input                         err_check_i,
+
   input                         cmp_block_busy_i,
   input                         meas_block_busy_i,
   input                         trans_block_busy_i,
@@ -22,42 +23,43 @@ module control_block(
   output trans_struct_t         op_pkt_o
 );
 
-localparam int PKT_W      = $bits( trans_struct_t );
 localparam int RND_ADDR_W = $bits( rnd_addr_reg );
 
 // csr register casting
-logic [11 : 0]              test_count_reg;
-test_mode_type              test_type_reg;
-addr_mode_type              addr_type_reg;
-logic [AMM_BURST_W - 1 : 0] burstcount_csr_reg;
-logic [AMM_ADDR_W - 1 : 0]  fix_addr_reg;
+logic [15 : 0]              test_count_reg;
+test_mode_t                 test_mode_reg;
+addr_mode_t                 addr_mode_reg;
+logic [AMM_BURST_W - 2 : 0] burstcount_csr_reg;
+logic [ADDR_W - 1 : 0]      fix_addr_csr_reg;
 
-assign test_count_reg     = test_param_reg_i[0][31:20];
-assign test_type_reg      = test_param_reg_i[0][17 : 16];
-assign addr_type_reg      = test_param_reg_i[0][15 : 13];
-assign burstcount_csr_reg = test_param_reg_i[0][AMM_BURST_W - 1 : 0];
-assign fix_addr_csr_reg   = test_param_reg_i[1][CTRL_ADDR_W - 1 : 0];
+assign test_count_reg     = test_param_reg_i[1][31 : 16];
+assign test_mode_reg      = test_param_reg_i[1][15 : 14];
+assign addr_mode_reg      = test_param_reg_i[1][13 : 11];
+assign burstcount_csr_reg = test_param_reg_i[1][AMM_BURST_W - 2 : 0];
+assign fix_addr_csr_reg   = test_param_reg_i[2][ADDR_W - 1 : 0];
 
 // variables declaration
-logic [11:0]                cmd_cnt;
-logic                       last_trans_flg;
-logic                       test_complete_flg;
-logic                       test_complete_state;
+logic [15:0]                        cmd_cnt;
+logic                               last_trans_flg;
+logic                               test_complete_flg, test_complete_state;
+logic                               cnt_en_state, trans_en_state; 
 
-logic                       rnd_addr_gen_bit;
-logic [CTRL_ADDR_W - 1 : 0] running_0_reg;
-logic [CTRL_ADDR_W - 1 : 0] running_1_reg;
-logic [CTRL_ADDR_W - 1 : 0] inc_addr_reg;
-logic [CTRL_ADDR_W - 1 : 0] fix_addr_reg;
+logic                               rnd_addr_gen_bit;
+logic [ADDR_W - 1 : 0]              fix_addr_reg;
+logic [ADDR_W - 1 : 0]              run_0_reg;
+logic [ADDR_W - 1 : 0]              run_1_reg;
+logic [ADDR_W - 1 : 0]              inc_addr_reg;
 
-logic [AMM_BURST_W - 1 : 0] word_burst_count;
-logic                       next_addr_en_stb;
-logic                       next_addr_allowed;
-logic                       op_en;
-logic                       low_burst_en;
-logic                       high_burst_en;
-logic [BYTE_ADDR_W - 1 : 0] start_offset;
-logic [BYTE_ADDR_W - 1 : 0] end_offset;
+logic [AMM_BURST_W - 2 : 0]         word_burst_count;
+logic                               next_addr_stb;
+logic                               next_addr_allowed;
+logic                               cmd_accepted_stb;
+logic [ADDR_B_W - 1 : 0]            start_offset;
+logic [ADDR_B_W - 1 : 0]            end_offset;
+
+logic [AMM_BURST_W - 2 : ADDR_B_W]  high_burst_bits;
+logic [ADDR_B_W - 1 : 0]            low_burst_bits;
+logic [ADDR_W - 1 : 0]              decoded_addr;
 
 enum logic [2:0] {
   IDLE_S,
@@ -72,10 +74,11 @@ enum logic [2:0] {
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     state <= IDLE_S;
-  else if( error_check_i )
-    state <= ERROR_CHECK_S;
   else
-    state <= next_state;
+    if( err_check_i )
+      state <= ERROR_CHECK_S;
+    else
+      state <= next_state;
 
 always_comb
   begin
@@ -84,7 +87,7 @@ always_comb
       IDLE_S :
         begin
           if( start_test_i )
-            case( test_type )
+            case( test_mode_reg )
               READ_ONLY       : next_state = READ_ONLY_S;
               WRITE_ONLY      : next_state = WRITE_ONLY_S;
               WRITE_AND_CHECK : next_state = WRITE_WORD_S;
@@ -129,161 +132,149 @@ always_comb
     endcase
   end
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i  )
-    cmd_cnt <= 12'( 0 );
-  else if( start_test_i )
-    cmd_cnt <= test_count_reg;
-  else if( op_valid_o && cmd_accept_ready_i )
-    cmd_cnt <= cmd_cnt - 1;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    last_trans_flg <= 1'b0;
-  else if( start_test_i )
-    last_trans_flg <= ( test_count_reg == 1 );
-  else if( op_valid_o && cmd_accept_ready_i )
-    last_trans_flg <= ( cmd_cnt == 2 );
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    op_valid_o <= 1'b0;
-  else if( error_check_i )
-    op_valid_o <= 1'b0;
-  else if( trans_en_state && !last_trans_flg )
-    op_valid_o <= 1'b1;
-  else if( cmd_accept_ready_i )
-    op_valid_o <= 1'b0;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    op_type_o <= 1'b0;
-  else if( trans_en_state )
-    case( state )
-      WRITE_ONLY_S : op_type_o <= 1'b0;
-      READ_ONLY_S  : op_type_o <= 1'b1;
-      WRITE_WORD_S : op_type_o <= ( !op_type_o && cmd_accept_ready_i );
-      READ_WORD_S  : op_type_o <= !( op_type_o && cmd_accept_ready_i );
-      default      : op_type_o <= 1'bX;
-    endcase
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    next_addr_en_stb <= 1'b0;
-  else
-    next_addr_en_stb <= ( op_en && next_addr_allowed );
-
 generate
-  if( CTRL_ADDR_W <= 8 )
+  if( ADDR_W <= 8 )
     begin
       logic [7:0] rnd_addr_reg;
-      assign rnd_addr_gen_bit = rnd_addr[7] ^ rnd_addr[5] ^ rnd_addr[4] ^ rnd_addr[3];
+      assign rnd_addr_gen_bit = rnd_addr_reg[7] ^ rnd_addr_reg[5] ^ rnd_addr_reg[4] ^ rnd_addr_reg[3];
     end
-  else if( CTRL_ADDR_W <= 16 )
-    begin
-      logic [15:0] rnd_addr_reg;
-      assign rnd_addr_gen_bit = rnd_addr[16] ^ rnd_addr[7] ^ rnd_addr[1];
-    end
-  else if( CTRL_ADDR_W <= 32 )
-    begin
-      logic [31:0] rnd_addr_reg;
-      assign rnd_addr_gen_bit = rnd_addr[31] ^ rnd_addr[21] ^ rnd_addr[1] ^ rnd_addr[0];
-    end
+  else
+    if( ADDR_W <= 16 )
+      begin
+        logic [15:0] rnd_addr_reg;
+        assign rnd_addr_gen_bit = rnd_addr_reg[16] ^ rnd_addr_reg[7] ^ rnd_addr_reg[1];
+      end
+    else
+      if( ADDR_W <= 32 )
+        begin
+          logic [31:0] rnd_addr_reg;
+          assign rnd_addr_gen_bit = rnd_addr_reg[31] ^ rnd_addr_reg[21] ^ rnd_addr_reg[1] ^ rnd_addr_reg[0];
+        end
 endgenerate
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    fix_addr_reg <= CTRL_ADDR_W'( 0 );
-  else if( ( addr_type_reg == FIX_ADDR ) && start_test_i )
+    rnd_addr_reg <= { RND_ADDR_W{ 1'b1 } };
+  else
+    if( next_addr_stb && addr_mode_reg == RND_ADDR )
+      rnd_addr_reg <= { rnd_addr_reg[RND_ADDR_W - 2 : 0], rnd_addr_gen_bit };
+
+always_ff @( posedge clk_i )
+  if( start_test_i && addr_mode_reg == FIX_ADDR )
     fix_addr_reg <= fix_addr_csr_reg;
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    rnd_addr_reg <= RND_ADDR_W'( 0 );
-  else if( addr_type_reg == RND_ADDR )
+always_ff @( posedge clk_i )
+  if( addr_mode_reg == RUN_0_ADDR )
     if( start_test_i )
-      rnd_addr_reg <= (RND_ADDR_W){1'b1};
-    else if( next_addr_en_stb )
-      rnd_addr_reg <= { rnd_addr_reg[$left( rnd_addr_reg ) - 2 : 0], rnd_addr_gen_bit };
+      run_0_reg <= { ADDR_W{ 1'b1 } } - 1'b1;
+    else
+      if( next_addr_stb )
+        run_0_reg <= { run_0_reg[ADDR_W - 2 : 0], run_0_reg[ADDR_W - 1] };
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    running_0_reg <= CTRL_ADDR_W'( 0 );
-  else if( addr_type_reg == RUN_0 )
+always_ff @( posedge clk_i )
+  if( addr_mode_reg == RUN_1_ADDR )
     if( start_test_i )
-      running_0_reg <= { (CTRL_ADDR_W - 1){1'b1}, 1'b0 };
-    else if( next_addr_en_stb )
-      running_0_reg <= { running_0_reg[CTRL_ADDR_W - 2 : 0], running_0_reg[CTRL_ADDR_W - 1] };
+      run_1_reg <= { ADDR_W{ 1'b0 } } + 1'b1;
+    else
+      if( next_addr_stb )
+        run_1_reg <= { run_1_reg[ADDR_W - 2 : 0], run_1_reg[ADDR_W - 1] };
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    running_1_reg <= CTRL_ADDR_W'( 0 );
-  else if( addr_type_reg == RUN_1 )
-    if( start_test_i )
-      running_1_reg <= { (CTRL_ADDR_W - 1){1'b0}, 1'b1 };
-    else if( next_addr_en_stb )
-      running_1_reg <= { running_1_reg[CTRL_ADDR_W - 2 : 0], running_1_reg[CTRL_ADDR_W - 1] };
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    inc_addr_reg <= CTRL_ADDR_W'( 0 );
-  else if( addr_type_reg == INC_ADDR )
+always_ff @( posedge clk_i )
+  if( addr_mode_reg == INC_ADDR )
     if( start_test_i )
       inc_addr_reg <= fix_addr_csr_reg;
-    else if( next_addr_en_stb )
-      inc_addr_reg <= inc_addr_reg + 1'b1;
+    else
+      if( next_addr_stb )
+        inc_addr_reg <= inc_addr_reg + 1'b1;
+
+always_comb
+  case( test_mode_reg )
+    FIX_ADDR    : decoded_addr = fix_addr_reg;
+    RND_ADDR    : decoded_addr = rnd_addr_reg[ADDR_W - 1 : 0];
+    RUN_0_ADDR  : decoded_addr = run_0_reg;
+    RUN_1_ADDR  : decoded_addr = run_1_reg;
+    INC_ADDR    : decoded_addr = inc_addr_reg;
+    default     : decoded_addr = ADDR_W'( 0 );
+  endcase
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    cmd_cnt <= test_count_reg;
+  else
+    if( cmd_accepted_stb && cnt_en_state )
+      cmd_cnt <= cmd_cnt - 1'b1;
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    last_trans_flg <= ( test_count_reg == 1 );
+  else
+    if( cmd_accepted_stb && cnt_en_state )
+      last_trans_flg <= ( cmd_cnt == 2 );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    op_pkt_o <= PKT_W'( 0 );
-  else if( op_en && trans_en_state )
+    op_valid_o <= 1'b0;
+  else
+    if( err_check_i )
+      op_valid_o <= 1'b0;
+    else
+      if( trans_en_state )
+        if( !op_valid_o || !last_trans_flg )
+          op_valid_o <= 1'b1;
+        else
+          if( cmd_accept_ready_i )
+            op_valid_o <= 1'b0;
+
+always_ff @( posedge clk_i )
+  if( trans_en_state )
+    case( state )
+      WRITE_ONLY_S : op_type_o <= 1'b0;
+      READ_ONLY_S  : op_type_o <= 1'b1;
+      WRITE_WORD_S : op_type_o <= cmd_accepted_stb;
+      READ_WORD_S  : op_type_o <= !cmd_accepted_stb;
+      default      : op_type_o <= 1'b0;
+    endcase
+
+always_ff @( posedge clk_i )
+  if( trans_en_state )
+    if( !op_valid_o || cmd_accepted_stb )
     begin
-      op_pkt_o.word_address     <= decoded_addr[CTRL_ADDR_W - 1 : BYTE_ADDR_W];
+      op_pkt_o.word_addr        <= decoded_addr;
       op_pkt_o.high_burst_bits  <= high_burst_bits;
       op_pkt_o.low_burst_bits   <= low_burst_bits;
       op_pkt_o.start_offset     <= start_offset;
       op_pkt_o.end_offset       <= end_offset;
     end
 
-always_comb
-  case( test_type_reg )
-    FIX_ADDR  : decoded_addr = fix_addr_reg;
-    RND_ADDR  : decoded_addr = rnd_addr_reg[CTRL_ADDR_W - 1 : 0];
-    RUN_0     : decoded_addr = running_0_reg;
-    RUN_1     : decoded_addr = running_1_reg;
-    INC_ADDR  : decoded_addr = inc_addr_reg;
-    default : decoded_addr = CTRL_ADDR_W'bX;
-  endcase
-
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    write_result_o <= 1'b0;
+    wr_result_o <= 1'b0;
   else
-    write_result_o <= ( test_complete_state && test_complete_flg );
-
-always_comb
-  if( ADDR_TYPE == WORD )
-    high_burst_bits = burstcount_csr_reg;
-  else if( ADDR_TYPE == BYTE )
-    high_burst_bits = ( burstcount_csr_reg >> BYTE_ADDR_W );
+    wr_result_o <= ( test_complete_state && test_complete_flg );
 
 assign trans_en_state       = ( state == WRITE_ONLY_S ) ||
                               ( state == READ_ONLY_S  ) ||
                               ( state == WRITE_WORD_S ) ||
                               ( state == READ_WORD_S  );
 
-assign next_addr_allowed    = ( state == WRITE_ONLY_S ) ||
-                              ( state == WRITE_WORD_S );
+assign cnt_en_state         = ( state == READ_ONLY_S  ) ||
+                              ( state == WRITE_ONLY_S ) ||
+                              ( state == READ_WORD_S  );
 
-assign test_complete_state  = ( state == END_TEST_S ) ||
-                              ( state == ERROR_CHECK_S );
+assign next_addr_stb        = ( cnt_en_state && ( !op_valid_o || cmd_accepted_stb ) );
 
-assign op_en                = ( !op_valid_o ) || ( op_valid_o && cmd_accept_ready_i );
+assign test_complete_state  = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
-assign low_burst_bits       = (BYTE_ADDR_W + 1)'( decoded_addr[BYTE_ADDR_W - 1 : 0] - burstcount_csr_reg[BYTE_ADDR_W - 1 : 0] );
-assign start_offset         = decoded[BYTE_ADDR_W - 1 : 0];
-assign end_offset           = BYTE_ADDR_W'( decoded[BYTE_ADDR_W - 1 : 0] + burstcount_csr_reg[BYTE_ADDR_W - 1 : 0] );
+assign cmd_accepted_stb     = ( op_valid_o && cmd_accept_ready_i );
+
+//assign high_burst_bits      = burstcount_csr_reg[AMM_BURST_W - 2 : ADDR_B_W];
+
+//assign low_burst_bits       = burstcount_csr_reg[ADDR_B_W - 1 : 0];
+
+assign start_offset         = decoded_addr[ADDR_B_W - 1 : 0];
+
+assign end_offset           = decoded_addr[ADDR_B_W - 1 : 0] + burstcount_csr_reg[ADDR_B_W - 1 : 0];
 
 assign test_complete_flg    = ( !cmp_block_busy_i && !meas_block_busy_i && !trans_block_busy_i );
 
-endmodule
+endmodule : control_block

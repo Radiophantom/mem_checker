@@ -1,0 +1,6 @@
+*.swp
+*.qpf
+*.qsf
+*.bak
+db/
+output_files/
