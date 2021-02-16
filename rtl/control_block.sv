@@ -19,18 +19,17 @@ module control_block(
   output logic                  wr_result_o,
 
   output logic                  op_valid_o,
-  output logic                  op_type_o, // 0-write, 1-read
   output trans_struct_t         op_pkt_o
 );
 
 localparam int RND_ADDR_W = $bits( rnd_addr_reg );
 
 // csr register casting
-logic [15 : 0]              test_count_reg;
-test_mode_t                 test_mode_reg;
-addr_mode_t                 addr_mode_reg;
-logic [AMM_BURST_W - 2 : 0] burstcount_csr_reg;
-logic [ADDR_W - 1 : 0]      fix_addr_csr_reg;
+logic [15 : 0]                      test_count_reg;
+test_mode_t                         test_mode_reg;
+addr_mode_t                         addr_mode_reg;
+logic [AMM_BURST_W - 2 : 0]         burstcount_csr_reg;
+logic [ADDR_W - 1 : 0]              fix_addr_csr_reg;
 
 assign test_count_reg     = test_param_reg_i[1][31 : 16];
 assign test_mode_reg      = test_param_reg_i[1][15 : 14];
@@ -40,8 +39,8 @@ assign fix_addr_csr_reg   = test_param_reg_i[2][ADDR_W - 1 : 0];
 
 // variables declaration
 logic [15:0]                        cmd_cnt;
-logic                               last_trans_flg;
-logic                               test_complete_flg, test_complete_state;
+logic                               last_trans_flg, test_complete_flg;
+logic                               test_complete_state;
 logic                               cnt_en_state, trans_en_state; 
 
 logic                               rnd_addr_gen_bit;
@@ -50,14 +49,12 @@ logic [ADDR_W - 1 : 0]              run_0_reg;
 logic [ADDR_W - 1 : 0]              run_1_reg;
 logic [ADDR_W - 1 : 0]              inc_addr_reg;
 
-logic [AMM_BURST_W - 2 : 0]         word_burst_count;
 logic                               next_addr_stb;
 logic                               next_addr_allowed;
 logic                               cmd_accepted_stb;
 logic [ADDR_B_W - 1 : 0]            start_offset;
 logic [ADDR_B_W - 1 : 0]            end_offset;
 
-logic [AMM_BURST_W - 2 : ADDR_B_W]  high_burst_bits;
 logic [ADDR_B_W - 1 : 0]            low_burst_bits;
 logic [ADDR_W - 1 : 0]              decoded_addr;
 
@@ -228,22 +225,27 @@ always_ff @( posedge clk_i, posedge rst_i )
 always_ff @( posedge clk_i )
   if( trans_en_state )
     case( state )
-      WRITE_ONLY_S : op_type_o <= 1'b0;
-      READ_ONLY_S  : op_type_o <= 1'b1;
-      WRITE_WORD_S : op_type_o <= cmd_accepted_stb;
-      READ_WORD_S  : op_type_o <= !cmd_accepted_stb;
-      default      : op_type_o <= 1'b0;
+      WRITE_ONLY_S : op_pkt_o.pkt_type <= 1'b0;
+      READ_ONLY_S  : op_pkt_o.pkt_type <= 1'b1;
+      WRITE_WORD_S : op_pkt_o.pkt_type <= cmd_accepted_stb;
+      READ_WORD_S  : op_pkt_o.pkt_type <= !cmd_accepted_stb;
+      default      : op_pkt_o.pkt_type <= 1'b0;
     endcase
 
 always_ff @( posedge clk_i )
   if( trans_en_state )
     if( !op_valid_o || cmd_accepted_stb )
     begin
-      op_pkt_o.word_addr        <= decoded_addr;
-      op_pkt_o.high_burst_bits  <= high_burst_bits;
-      op_pkt_o.low_burst_bits   <= low_burst_bits;
-      op_pkt_o.start_offset     <= start_offset;
-      op_pkt_o.end_offset       <= end_offset;
+      if( ADDR_TYPE == "BYTE" )
+        begin
+          op_pkt_o.word_addr      <= { decoded_addr[ADDR_W - 1 : ADDR_B_W], ADDR_B_W'( 0 ) };
+          op_pkt_o.low_burst_bits   <= low_burst_bits;
+          op_pkt_o.start_offset     <= start_offset;
+          op_pkt_o.end_offset       <= end_offset;
+        end
+      else
+        if( ADDR_TYPE == "WORD" )
+          op_pkt_o.word_addr    <= decoded_addr;
     end
 
 always_ff @( posedge clk_i, posedge rst_i )
@@ -267,9 +269,7 @@ assign test_complete_state  = ( state == END_TEST_S   ) || ( state == ERROR_CHEC
 
 assign cmd_accepted_stb     = ( op_valid_o && cmd_accept_ready_i );
 
-//assign high_burst_bits      = burstcount_csr_reg[AMM_BURST_W - 2 : ADDR_B_W];
-
-//assign low_burst_bits       = burstcount_csr_reg[ADDR_B_W - 1 : 0];
+assign low_burst_bits       = (ADDR_B_W + 1)'( burstcount_csr_reg[ADDR_B_W - 1 : 0] + decoded_addr[ADDR_B_W - 1 : 0] );
 
 assign start_offset         = decoded_addr[ADDR_B_W - 1 : 0];
 

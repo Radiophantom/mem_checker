@@ -6,7 +6,6 @@ module transmitter_block(
 
   // Address block interface
   input                               op_valid_i,
-  input                               op_type_i,
   input  trans_struct_t               op_pkt_i,
 
   input         [2 : 1] [31 : 0]      test_param_reg_i,
@@ -33,221 +32,251 @@ module transmitter_block(
   output logic  [DATA_B_W - 1 : 0]    byteenable_o
 );
 
-localparam int CMP_PKT_W = $bits( cmp_struct_t );
-
-function logic [DATA_B_W - 1 : 0] byteenable_ptrn_func( input logic                    start_or_end_flag, // 0-start, 1-end
-                                                        input logic [ADDR_B_W - 1 : 0] start_offset,
-                                                        input logic [ADDR_B_W - 1 : 0] end_offset        );
+function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
+  input logic                     start_flag,
+  input logic                     end_flag,
+  input logic [ADDR_B_W - 1 : 0]  start_offset,
+  input logic [ADDR_B_W - 1 : 0]  end_offset
+);
   for( int i = 0; i < DATA_B_W; i++ )
-    if( start_or_end_flag )
-      byteenable_ptrn[i] = ( i <= end_offset   );
-    else
-      byteenable_ptrn[i] = ( i >= start_offset );
-endfunction : byteenable_ptrn_func
+    case( { start_flag, end_flag } )
+      1 : byteenable_ptrn[i] = ( i <= end_offset   );
+      2 : byteenable_ptrn[i] = ( i >= start_offset );
+      3 : byteenable_ptrn[i] = ( i >= start_offset ) && ( i <= end_offset );
+      default : byteenable_ptrn[i] = 1'bX;
+    endcase
+endfunction : byteenable_ptrn
 
 // csr registers casting
-data_mode_t              data_ptrn_mode_reg;
-test_mode_t              test_mode_reg;
+data_mode_t                 data_ptrn_mode_reg;
+test_mode_t                 test_mode_reg;
 
-logic [AMM_BURST_W - 1 : 0] burstcount_csr_reg;
-logic [7 : 0]               fix_data_ptrn_reg;
+logic [AMM_BURST_W - 1 : 0] burstcount_reg;
+logic [7 : 0]               data_ptrn_reg;
+logic                       rnd_data_gen_bit;
+logic [7 : 0]               rnd_data_reg;
+logic [AMM_BURST_W - 1 : 0] burstcount_exp;
 
-assign fix_data_ptrn_reg  = test_param_reg_i[2][7 : 0];
-assign burstcount_csr_reg = test_param_reg_i[1][AMM_BURST_W - 2 : 0];
-assign data_ptrn_type_reg = test_param_reg_i[1][12];
-assign test_type_reg      = test_param_reg_i[1][17 : 16];
+assign data_ptrn_reg      = test_param_reg_i[2][7 : 0];
+assign burstcount_reg     = test_param_reg_i[1][AMM_BURST_W - 2 : 0];
+assign data_ptrn_mode_reg = test_param_reg_i[1][12];
+assign test_mode_reg      = test_param_reg_i[1][17 : 16];
 
 // variables declaration
 logic [AMM_BURST_W - 1 : 0] burst_cnt;
-logic                       write_word_complete_stb;
+logic                       wr_unit_complete_stb;
 logic                       start_trans_stb;
-logic                       last_transaction_flg;
-logic                       cur_op_type;
-pkt_struct_type             cur_op_pkt;
+logic                       last_trans_flg;
+cmp_struct_t                storage_op_pkt;
+cmp_struct_t                cur_op_pkt;
 logic                       low_burst_en_flg;
 logic                       high_burst_en_flg;
-logic                       trans_pkt_en;
-
-logic [DATA_B_W - 1 : 0] end_mask_temp;
+logic                       pkt_storage_valid;
 
 // first stage -- analyzing of packet, calculating main expression
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    trans_pkt_en <= 1'b0;
-  else if( error_check_i )
-    trans_pkt_en <= 1'b0;
-  else if( cmd_accept_ready_o )
-    trans_pkt_en <= op_valid_i;
+    pkt_storage_valid <= 1'b0;
+  else
+    if( error_check_i )
+      pkt_storage_valid <= 1'b0;
+    else
+      if( cmd_accept_ready_o )
+        pkt_storage_valid <= op_valid_i;
 
 always_ff @( posedge clk_i )
   if( cmd_accept_ready_o && op_valid_i )
-    high_burst_en_flg <= ( burstcount_csr_reg[AMM_BURST_W - 2 : ADDR_B_W] != 0 );
+    if( ADDR_TYPE == "BYTE" )
+      begin
+        storage_op_pkt.pkt_type     <= op_pkt_i.pkt_type;
+        storage_op_pkt.word_addr    <= op_pkt_i.word_addr;
+        storage_op_pkt.start_mask   <= byteenable_ptrn( 1'b1, 1'b0, op_pkt_i.start_offset, op_pkt_i.end_offset );
+        storage_op_pkt.end_mask     <= byteenable_ptrn( 1'b0, 1'b1, op_pkt_i.start_offset, op_pkt_i.end_offset );
+        storage_op_pkt.middle_mask  <= byteenable_ptrn( 1'b1, 1'b1, op_pkt_i.start_offset, op_pkt_i.end_offset );
+      end
+    else
+      if( ADDR_TYPE == "WORD" )
+        begin
+          storage_op_pkt.pkt_type   <= op_pkt_i.pkt_type;
+          storage_op_pkt.word_addr  <= op_pkt_i.word_addr;
+        end
 
 always_ff @( posedge clk_i )
   if( cmd_accept_ready_o && op_valid_i )
-    low_burst_en_flg <= ( ( burstcount_csr_reg[ADDR_B_W : 0] + op_pkt_i.start_offset ) >= DATA_B_W );
+    if( ADDR_TYPE == "BYTE" )
+      high_burst_en_flg <= ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] != 0 );
+    else
+      if( ADDR_TYPE == "WORD" )
+        high_burst_en_flg <= ( burstcount_reg != 0 );
 
 always_ff @( posedge clk_i )
   if( cmd_accept_ready_o && op_valid_i )
-    begin
-      cur_op_pkt.word_address     <= op_pkt_i.word_address;
-      cur_op_pkt.burst_word_count <= op_pkt_i.high_burst_bits;
-      cur_op_pkt.start_mask       <= byteenable_ptrn_func( op_pkt_i.start_offset, 0 );
-      cur_op_pkt.end_mask         <= byteenable_ptrn_func( op_pkt_i.end_offset,   1 );
-    end
-
-always_ff @( posedge clk_i )
-  if( cmd_accept_ready_o && op_valid_i )
-    cur_op_type <= op_type_i;
-
-always_ff @( posedge clk_i )
-  if( trans_pkt_en )
-    end_mask_temp <= cur_op_pkt.end_mask;
+    low_burst_en_flg <= ( op_pkt_i.low_burst_bits >= DATA_B_W );
 
 // second stage -- transmitting packet through AMM interface
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    cmd_accept_ready_o <= 1'b0;
-  else if( cmd_accept_ready_o )
-    cmd_accept_ready_o <= ( !trans_pkt_en );
-  else if( read_o )
-    cmd_accept_ready_o <= ( !waitrequest_i );
-  else if( write_o )
-    cmd_accept_ready_o <= ( last_transaction_flg && !waitrequest_i );
+always_ff @( posedge clk_i )
+  if( start_trans_stb )
+    cur_op_pkt <= storage_op_pkt;
 
 always_ff @( posedge clk_i )
   if( start_trans_stb )
-    address_o <= ( cur_op_pkt.word_address << ADDR_B_W );
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    last_transaction_flg <= 1'b0;
-  else if( start_trans_stb )
-    last_transaction_flg <= !( high_burst_en_flg || low_burst_en_flg );
-  else if( write_cycle_complete_stb )
-    last_transaction_flg <= ( burst_cnt == 2 );
+    address_o <= storage_op_pkt.word_addr;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     write_o <= 1'b0;
-  else if( start_trans_stb && !cur_op_type )
-    write_o <= 1'b1;
-  else if( last_transaction_flg && write_cycle_complete_stb )
-    write_o <= 1'b0;
+  else
+    if( start_trans_stb && !storage_op_pkt.pkt_type )
+      write_o <= 1'b1;
+    else
+      if( last_trans_flg && wr_unit_complete_stb )
+        write_o <= 1'b0;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     read_o <= 1'b0;
-  else if( start_trans_stb && cur_op_type )
-    read_o <= 1'b1;
-  else if( !waitrequest_i )
-    read_o <= 1'b0;
+  else
+    if( start_trans_stb && storage_op_pkt.pkt_type )
+      read_o <= 1'b1;
+    else
+      if( !waitrequest_i )
+        read_o <= 1'b0;
+
+generate
+  if( ADDR_TYPE == "BYTE" )
+    begin : byte_address
+
+      logic [DATA_B_W - 1 : 0]            byteenable_exp;
+
+      always_ff @( posedge clk_i )
+        if( start_trans_stb )
+          if( storage_op_pkt.pkt_type )
+            burstcount_o <= burstcount_exp;
+          else
+            burstcount_o <= burstcount_reg + 1'b1;
+
+      always_ff @( posedge clk_i )
+        if( start_trans_stb )
+          begin
+            if( storage_op_pkt.pkt_type )
+              byteenable_o <= '1;
+            else
+              if( high_burst_en_flg || low_burst_en_flg )
+                byteenable_o <= storage_op_pkt.start_mask;
+              else
+                byteenable_o <= storage_op_pkt.middle_mask;
+          end
+        else
+          if( wr_unit_complete_stb )
+            byteenable_o <= byteenable_exp;
+
+      always_ff @( posedge clk_i, posedge rst_i )
+        if( rst_i )
+          burst_cnt <= AMM_BURST_W'( 0 );
+        else
+          if( start_trans_stb )
+            burst_cnt <= burstcount_exp;
+          else
+            if( wr_unit_complete_stb )
+              burst_cnt <= burst_cnt - 1'b1;
+
+      assign burstcount_exp = ( low_burst_en_flg ) ?  ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] + 2'd2 ) :
+                                                      ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] + 2'd1 );
+
+      assign byteenable_exp = ( burst_cnt == 2 ) ? ( cur_op_pkt.end_mask  ) :
+                                                   ( '1                   );
+                                                  
+    end
+  else
+    if( ADDR_TYPE == "WORD" )
+      begin : word_address
+        
+        always_ff @( posedge clk_i )
+          if( start_trans_stb )
+            burstcount_o <= burstcount_exp;
+
+        always_ff @( posedge clk_i, posedge rst_i )
+          if( rst_i )
+            burst_cnt <= AMM_BURST_W'( 0 );
+          else
+            if( start_trans_stb )
+              burst_cnt <= burstcount_reg + 1'b1;
+            else
+              if( wr_unit_complete_stb )
+                burst_cnt <= burst_cnt - 1'b1;
+
+        assign byteenable_o   = '1;
+        assign burstcount_exp = burstcount_reg + 1'b1;
+
+      end
+endgenerate
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    last_trans_flg <= 1'b0;
+  else
+    if( start_trans_stb )
+      last_trans_flg <= !( high_burst_en_flg || low_burst_en_flg );
+    else
+      if( wr_unit_complete_stb )
+        last_trans_flg <= ( burst_cnt == 2 );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rnd_data_reg <= 8'hFF;
-  else if( data_ptrn_type_reg == RND_DATA )
-    if( start_trans_stb || write_cycle_complete_stb )
-      rnd_data_reg <= { rnd_data_reg[6:0], rnd_data_gen_bit };
+  else
+    if( data_ptrn_mode_reg == RND_DATA )
+      if( start_trans_stb || wr_unit_complete_stb )
+        rnd_data_reg <= { rnd_data_reg[6 : 0], rnd_data_gen_bit };
+
+always_ff @( posedge clk_i )
+  if( start_trans_stb || wr_unit_complete_stb )
+    if( data_ptrn_mode_reg == RND_DATA )
+      writedata_o <= { DATA_B_W{ rnd_data_reg       } };
+    else
+      writedata_o <= { DATA_B_W{ data_ptrn_reg  } };
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    writedata_o <= AMM_DATA_W'( 0 );
-  else if( start_trans_stb || write_cycle_complete_stb )
-    if( data_ptrn_type_reg == RND_DATA )
-      writedata_o <= DATA_B_W{ rnd_data_reg };
+    cmd_accept_ready_o <= 1'b0;
+  else
+    if( cmd_accept_ready_o )
+      cmd_accept_ready_o <= ( !pkt_storage_valid );
     else
-      writedata_o <= fix_data_ptrn_reg;
+      if( read_o )
+        cmd_accept_ready_o <= ( !waitrequest_i );
+      else
+        if( write_o )
+          cmd_accept_ready_o <= ( last_trans_flg && !waitrequest_i );
 
 // interaction with compare block
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     cmp_pkt_en_o <= 1'b0;
-  else if(  )
-    cmp_pkt_en_o <= ( start_trans_stb && !cur_op_type );
+  else
+    if( test_mode_reg == WRITE_AND_CHECK )
+      cmp_pkt_en_o <= ( start_trans_stb && !storage_op_pkt.pkt_type );
+    else
+      cmp_pkt_en_o <= 1'b0;
 
 always_ff @( posedge clk_i )
-  if( start_trans_stb && !cur_op_type )
-    begin
-      cmp_pkt_struct_o.word_address     <= cur_op_pkt.word_address;
-      cmp_pkt_struct_o.burst_word_count <= cur_op_pkt.burst_word_count;
-      cmp_pkt_struct_o.start_mask       <= cur_op_pkt.start_mask;
-      cmp_pkt_struct_o.end_mask         <= cur_op_pkt.end_mask;
-      cmp_pkt_struct_o.data_ptrn_type   <= data_ptrn_type_reg;
-      if( data_ptrn_type_reg == RND_DATA )
-        cmp_pkt_struct_o.data_ptrn <= rnd_data_reg;
-      else
-        cmp_pkt_struct_o.data_ptrn <= fix_data_ptrn_reg;
-    end
-
-generate
-  if( ADDR_TYPE == BYTE )
-    begin : byte_address
-
-      logic [AMM_BURST_W - 1 : 0] burstcount_exp;
-
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          burstcount_o <= AMM_BURST_W'( 0 );
-        else if( start_trans_stb )
-          if( cur_op_type )
-            burstcount_o <= burstcount_exp;
-          else
-            burstcount_o <= burstcount_csr_reg + 1'b1;
-
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          byteenable_o <= DATA_B_W'( 0 );
-        else if( start_trans_stb )
-          if( cur_op_type )
-            byteenable_o <= DATA_B_W{ 1'b1 };
-          else if( high_burst_en_flg || low_burst_en_flg )
-            byteenable_o <= cur_op_pkt.start_mask;
-          else
-            byteenable_o <= ( cur_op_pkt.start_mask && cur_op_pkt.end_mask );
-        else if( write_cycle_complete_stb )
-          byteenable_o <= byteenable_temp;
-
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          burst_cnt <= AMM_BURST_W'( 0 );
-        else if( start_trans_stb )
-          burst_cnt <= burstcount_exp;
-        else if( write_cycle_complete_stb )
-          burst_cnt <= burst_cnt - 1'b1;
-
-      assign burstcount_exp = ( low_burst_en_flg ) ?  ( cur_op_pkt.burst_word_count + 2'd2 ) :
-                                                      ( cur_op_pkt.burst_word_count + 2'd1 );
-
-      assign byteenable_temp = ( burst_cnt == 2 ) ? ( end_mask_temp         ) :
-                                                    ( DATA_B_W{ 1'b1 } );
-                                                  
-    end
-  else
-    if( ADDR_TYPE == WORD )
-      begin : word_address
-        
-        always_ff @( posedge clk_i, posedge rst_i )
-          if( rst_i )
-            burstcount_o <= AMM_BURST_W'( 0 );
-          else if( start_trans_stb )
-            burstcount_o <= burstcount_csr_reg;
-
-        always_ff @( posedge clk_i, posedge rst_i )
-          if( rst_i )
-            burst_cnt <= AMM_BURST_W'( 0 );
-          else if( start_trans_stb )
-            burst_cnt <= burstcount_csr_reg;
-          else if( write_cycle_complete_stb )
-            burst_cnt <= burst_cnt - 1'b1;
-
-        assign byteenable_o = DATA_B_W{ 1'b1 };
-
+  if( test_mode_reg == WRITE_AND_CHECK )
+    if( start_trans_stb && !storage_op_pkt.pkt_type )
+      begin
+        cmp_pkt_o.word_addr       <= storage_op_pkt.word_addr;
+        cmp_pkt_o.word_count      <= burstcount_exp;
+        cmp_pkt_o.start_mask      <= storage_op_pkt.start_mask;
+        cmp_pkt_o.end_mask        <= storage_op_pkt.end_mask;
+        cmp_pkt_o.middle_mask     <= storage_op_pkt.middle_mask;
+        cmp_pkt_o.data_ptrn_mode  <= data_ptrn_mode_reg;
+        if( data_ptrn_mode_reg == RND_DATA )
+          cmp_pkt_o.data_ptrn <= rnd_data_reg;
+        else
+          cmp_pkt_o.data_ptrn <= data_ptrn_reg;
       end
-endgenerate
 
-assign rnd_data_gen_bit         = ( rnd_data[6] ^ rnd_data[1] ^ rnd_data[0] );
-assign write_cycle_complete_stb = ( write_o && !waitrequest_i               );
-assign start_trans_stb          = ( cmd_accept_ready_o && trans_pkt_en      );
+assign rnd_data_gen_bit     = ( rnd_data_reg[6] ^ rnd_data_reg[1] ^ rnd_data_reg[0] );
+assign wr_unit_complete_stb = ( write_o && !waitrequest_i               );
+assign start_trans_stb      = ( cmd_accept_ready_o && pkt_storage_valid && !error_check_i );
 
 endmodule : transmitter_block

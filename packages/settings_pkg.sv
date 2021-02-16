@@ -32,20 +32,22 @@ typedef enum logic {
 } data_mode_t;
 
 typedef struct packed{
+  logic                       pkt_type;
   logic [ADDR_W - 1 : 0]      word_addr;
-  logic [AMM_BURST_W - 2 : 0] burst_word_count;
+  logic [AMM_BURST_W - 1 : 0] word_count;
   logic [DATA_B_W - 1 : 0]    start_mask;
   logic [DATA_B_W - 1 : 0]    end_mask;
+  logic [DATA_B_W - 1 : 0]    middle_mask;
+  logic                       data_ptrn_mode;
   logic [7 : 0]               data_ptrn;
-  logic                       data_ptrn_type;
 } cmp_struct_t;
 
 typedef struct packed{
-  logic [ADDR_W - 1 : 0]      word_addr;
-  logic [AMM_BURST_W - 2 : 0] high_burst_bits;
-  logic [ADDR_B_W - 1 : 0]    low_burst_bits;
-  logic [ADDR_B_W - 1 : 0]    start_offset;
-  logic [ADDR_B_W - 1 : 0]    end_offset;
+  logic                     pkt_type;
+  logic [ADDR_W - 1 : 0]    word_addr;
+  logic [ADDR_B_W : 0]      low_burst_bits;
+  logic [ADDR_B_W - 1 : 0]  start_offset;
+  logic [ADDR_B_W - 1 : 0]  end_offset;
 } trans_struct_t;
 
 // Testbench parameters and data-types
