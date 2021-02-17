@@ -1,16 +1,17 @@
-package settings_pkg;
+package rtl_settings_pkg;
 
-// Module parameters and data-types
 parameter int     MEM_ADDR_W  = 31;
 parameter int     MEM_DATA_W  = 16;
 parameter int     AMM_ADDR_W  = 28;
 parameter int     AMM_DATA_W  = 128;
 parameter int     AMM_BURST_W = 11;
+
 parameter int     DATA_B_W    = ( AMM_DATA_W / 8 );
 parameter int     ADDR_B_W    = $clog2( DATA_B_W );
+
 parameter string  ADDR_TYPE   = "BYTE"; // BYTE or WORD
-parameter int     ADDR_W      = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )           ) :
-                                                          ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W )  );
+parameter int     ADDR_W      = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
+                                                          ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W ) );
 
 typedef enum logic [1:0] {
   READ_ONLY       = 2'b01,
@@ -27,8 +28,8 @@ typedef enum logic [2:0] {
 } addr_mode_t;
 
 typedef enum logic {
-  FIX_DATA,
-  RND_DATA
+  FIX_DATA = 1'b0,
+  RND_DATA = 1'b1
 } data_mode_t;
 
 typedef struct packed{
@@ -40,7 +41,7 @@ typedef struct packed{
   logic [DATA_B_W - 1 : 0]    middle_mask;
   logic                       data_ptrn_mode;
   logic [7 : 0]               data_ptrn;
-} cmp_struct_t;
+} cmp_pkt_t;
 
 typedef struct packed{
   logic                     pkt_type;
@@ -48,37 +49,6 @@ typedef struct packed{
   logic [ADDR_B_W : 0]      low_burst_bits;
   logic [ADDR_B_W - 1 : 0]  start_offset;
   logic [ADDR_B_W - 1 : 0]  end_offset;
-} trans_struct_t;
+} trans_pkt_t;
 
-// Testbench parameters and data-types
-parameter int RND_WAITREQ   = 0;
-parameter int RND_RVALID    = 0;
-
-parameter int CLK_SYS_T = 10_000;
-parameter int CLK_MEM_T = 8_000;
-
-typedef struct{
-  bit           error;
-  bit [11 : 0]  error_num;
-} err_struct_t;
-
-typedef struct{
-  bit [31 : 0] csr_1_reg;
-  bit [31 : 0] csr_2_reg;
-  bit [31 : 0] csr_3_reg;
-} test_struct_t;
-
-typedef struct packed{
-  bit [31 : 0] result_reg;
-  bit [31 : 0] err_addr_reg;
-  bit [31 : 0] err_data_reg;
-  bit [31 : 0] wr_ticks_reg;
-  bit [31 : 0] wr_units_reg;
-  bit [31 : 0] rd_ticks_reg;
-  bit [31 : 0] rd_words_reg;
-  bit [31 : 0] min_max_reg;
-  bit [31 : 0] sum_reg;
-  bit [31 : 0] rd_req_reg;
-} res_struct_t;
-
-endpackage
+endpackage : rtl_settings_pkg

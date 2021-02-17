@@ -1,4 +1,4 @@
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module csr_block( 
   input                           rst_i,
@@ -20,11 +20,10 @@ module csr_block(
 
   input         [ADDR_W - 1 : 0]  err_addr_i,
   input         [7 : 0]           err_data_i,
-  input         [7 : 0]           exp_data_i,
+  input         [7 : 0]           orig_data_i,
 
-  input         [15 : 0]          rd_req_cnt_i,
-  input         [15 : 0]          min_delay_i,
-  input         [15 : 0]          max_delay_i,
+  input         [31 : 0]          rd_req_cnt_i,
+  input         [31 : 0]          min_max_delay_i,
   input         [31 : 0]          sum_delay_i,
 
   input         [31 : 0]          rd_ticks_i,
@@ -62,12 +61,12 @@ always_ff @( posedge clk_sys_i )
     begin
       csr_reg[5]  <= test_result_i;
       csr_reg[6]  <= err_addr_i;
-      csr_reg[7]  <= { exp_data_i, err_data_i };
+      csr_reg[7]  <= { orig_data_i, err_data_i };
       csr_reg[8]  <= wr_ticks_i;
       csr_reg[9]  <= wr_units_i;
       csr_reg[10] <= rd_ticks_i;
       csr_reg[11] <= rd_words_i;
-      csr_reg[12] <= { min_delay_i, max_delay_i };
+      csr_reg[12] <= min_max_delay_i;
       csr_reg[13] <= sum_delay_i;
       csr_reg[14] <= rd_req_cnt_i;
     end

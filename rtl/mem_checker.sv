@@ -1,6 +1,4 @@
-`include "../src/interface/amm_if.sv"
-
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module mem_checker(
   input                               rst_i,
@@ -30,154 +28,148 @@ module mem_checker(
   output logic  [DATA_B_W - 1 : 0]    mem_byteenable_o
 );
 
-amm_if.master_lite  amm_master( clk_sys_i );
-amm_if.slave        amm_slave ( clk_sys_i );
-
-logic [15 : 4][31 : 0]  csr_registers;
-logic [3 : 1][31 : 0]   test_param;
+logic [15 : 0][31 : 0]  csr_registers;
 
 logic wr_result;
 logic test_result;
 
-csr_block_inst csr_block( 
+logic err_check;
+logic cmp_block_busy;
+logic trans_block_busy;
+logic meas_block_busy;
+logic cmd_accepted;
+logic cmp_pkt_en;
+
+logic start_test;
+logic op_valid;
+
+csr_block csr_block_inst( 
   .rst_i            ( rst_i                 ),
   .clk_sys_i        ( clk_sys_i             ),
   .clk_mem_i        ( clk_mem_i             ),
 
-  .read_i           ( amm_master.read       ),
-  .write_i          ( amm_master.write      ),
-  .address_i        ( amm_master.address    ),
-  .writedata_i      ( amm_master.writedata  ),
-  .readdata_o       ( amm_master.readdata   ),
+  .read_i           ( sys_read_i       ),
+  .write_i          ( sys_write_i      ),
+  .address_i        ( sys_address_i    ),
+  .writedata_i      ( sys_writedata_i  ),
+  .readdata_o       ( sys_readdata_o   ),
 
-  .wr_result_i      ( wr_result                   ),
-  .test_result_i    ( test_result                 ),
+  .wr_result_i      ( wr_result        ),
+  .test_result_i    ( test_result      ),
 
   .err_addr_i       ( csr_registers[6]            ),
   .err_data_i       ( csr_registers[7][7 : 0]     ),
-  .exp_data_i       ( csr_registers[7][15 : 8]    ),
-  .rd_req_cnt_i     ( csr_registers[14]           ),
-  .min_delay_i      ( csr_registers[12][31 : 16]  ),
-  .max_delay_i      ( csr_registers[12][15 : 0]   ),
-  .sum_delay_i      ( csr_registers[13]           ),
+  .orig_data_i      ( csr_registers[7][15 : 8]    ),
+  .wr_ticks_i       ( csr_registers[8]            ),
+  .wr_units_i       ( csr_registers[9]            ),
   .rd_ticks_i       ( csr_registers[10]           ),
   .rd_words_i       ( csr_registers[11]           ),
-  .wr_ticks_i       ( csr_registers[18]           ),
-  .wr_units_i       ( csr_registers[19]           ),
+  .min_max_delay_i  ( csr_registers[12]           ),
+  .sum_delay_i      ( csr_registers[13]           ),
+  .rd_req_cnt_i     ( csr_registers[14]           ),
 
   .start_test_o     ( start_test                  ),
-  .test_param_reg_o ( test_param                  ) 
+  .test_param_reg_o ( csr_registers[3 : 1]        ) 
 );
 
-ctrl_block_inst control_block(
-  .rst_i              ( rst_i ),
-  .clk_i              ( clk_mem_i ),
+control_block control_block_inst(
+  .rst_i              ( rst_i                 ),
+  .clk_i              ( clk_mem_i             ),
 
-  .start_test_i       ( start_test ),
+  .start_test_i       ( start_test            ),
 
-  .err_check_i        ( err_check ),
+  .err_check_i        ( err_check             ),
 
-  .cmp_block_busy_i   ( cmp_block_busy ),
-  .meas_block_busy_i  ( meas_block_busy),
-  .trans_block_busy_i ( trans_block_busy),
+  .cmp_block_busy_i   ( cmp_block_busy        ),
+  .meas_block_busy_i  ( meas_block_busy       ),
+  .trans_block_busy_i ( trans_block_busy      ),
 
-  .test_param_reg_i   ( test_param[3 : 1] ),
+  .test_param_reg_i   ( csr_registers[3 : 1]  ),
 
-  .cmd_accept_ready_i ( cmd_accepted ),
+  .cmd_accept_ready_i ( cmd_accepted          ),
 
-  .wr_result_o        ( wr_result ),
+  .wr_result_o        ( wr_result             ),
+  .test_result_o      ( test_result           ),
 
-  .op_valid_o         ( op_valid ),
-  .op_pkt_o           ( op_pkt )
+  .op_valid_o         ( op_valid              ),
+  .op_pkt_o           ( op_pkt                )
 );
 
-trans_struct_t op_pkt;
-logic op_valid;
+trans_pkt_t op_pkt;
+cmp_pkt_t cmp_pkt;
 
-cmp_struct_t cmp_pkt;
-logic cmp_pkt;
+transmitter_block transmitter_block_inst( 
+  .rst_i              ( rst_i                 ),
+  .clk_i              ( clk_mem_i             ),
 
-trans_block_inst transmitter_block( 
-  .rst_i              ( rst_i ),
-  .clk_i              ( clk_mem_i ),
+  .op_valid_i         ( op_valid              ),
+  .op_pkt_i           ( op_pkt                ),
 
-  .op_valid_i         ( op_valid ),
-  .op_pkt_i           ( op_pkt ),
+  .test_param_reg_i   ( csr_registers[3 : 1]  ),
 
-  .test_param_reg_i   ( test_param[3 : 1] ),
+  .cmd_accept_ready_o ( cmd_accepted          ),
+  .trans_block_busy_o ( trans_block_busy      ),
 
-  .cmd_accept_ready_o ( cmd_accepted ),
-  .trans_block_busy_o ( trans_block_busy ),
+  .error_check_i      ( err_check             ),
 
-  .error_check_i      ( err_check ),
+  .cmp_pkt_en_o       ( cmp_pkt_en            ),
+  .cmp_pkt_o          ( cmp_pkt               ),
 
-  .cmp_pkt_en_o       ( cmp_pkt_en ),
-  .cmp_pkt_o          ( cmp_pkt ),
+  .readdatavalid_i    ( mem_readdatavalid_i ),
+  .readdata_i         ( mem_readdata_i      ),
+  .waitrequest_i      ( mem_waitrequest_i   ),
 
-  .readdatavalid_i    ( amm_slave.readdatavalid ),
-  .readdata_i         ( amm_slave.readdata      ),
-  .waitrequest_i      ( amm_slave.waitrequest   ),
-
-  .address_o          ( amm_slave.address       ),
-  .read_o             ( amm_slave.read          ),
-  .write_o            ( amm_slave.write         ),
-  .writedata_o        ( amm_slave.writedata     ),
-  .burstcount_o       ( amm_slave.burstcount    ),
-  .byteenable_o       ( amm_slave.byteenable    )
+  .address_o          ( mem_address_o       ),
+  .read_o             ( mem_read_o          ),
+  .write_o            ( mem_write_o         ),
+  .writedata_o        ( mem_writedata_o     ),
+  .burstcount_o       ( mem_burstcount_o    ),
+  .byteenable_o       ( mem_byteenable_o    )
 );
 
-cmp_block_inst compare_block(
-  .rst_i            ( rst_i             ),
-  .clk_i            ( clk_mem_i         ),
+compare_block compare_block_inst(
+  .rst_i            ( rst_i                     ),
+  .clk_i            ( clk_mem_i                 ),
 
-  .start_test_i     ( start_test_i      ),
+  .start_test_i     ( start_test                ),
 
+  .readdatavalid_i  ( mem_readdatavalid_i       ),
+  .readdata_i       ( mem_readdata_i            ),
 
-  .readdatavalid_i  ( readdatavalid_i   ),
-  .readdata_i       ( readdata_i        ),
+  .cmp_pkt_en_i     ( cmp_pkt_en                ),
+  .cmp_pkt_i        ( cmp_pkt                   ),
 
+  .err_check_o      ( err_check                 ),
+  .err_addr_o       ( csr_registers[6]          ),
+  .err_data_o       ( csr_registers[7][7 : 0]   ),
+  .orig_data_o      ( csr_registers[7][15 : 8]  ),
 
-  .cmp_pkt_en_i     ( cmp_pkt_en_i      ),
-  .cmp_pkt_i        ( cmp_pkt_i         ),
-
-
-  .error_check_o    ( error_check_o     ),
-  .check_err_addr_o ( check_err_addr_o  ),
-
-  .cmp_block_busy_o ( cmp_block_busy_o  )
+  .cmp_block_busy_o ( cmp_block_busy            )
 );
 
-amm_if.slave_mon amm_slave_mon;
+measure_block measure_block_inst( 
+  .rst_i              ( rst_i               ),
+  .clk_i              ( clk_mem_i           ),
 
-meas_block_inst measure_block( 
-  .rst_i                      ( rst_i                       ),
-  .clk_i                      ( clk_mem_i                   ),
+  .readdatavalid_i    ( mem_readdatavalid_i ),
+  .waitrequest_i      ( mem_waitrequest_i   ),
 
-  .readdatavalid_i            ( amm_slave_mon.readdatavalid ),
-  .waitrequest_i              ( amm_slave_mon.waitrequest   ),
+  .read_i             ( mem_read_o          ),
+  .write_i            ( mem_write_o         ),
+  .burstcount_i       ( mem_burstcount_o    ),
+  .byteenable_i       ( mem_byteenable_o    ),
 
-  .read_i                     ( amm_slave_mon.read          ),
-  .write_i                    ( amm_slave_mon.write         ),
-  .burstcount_i               ( amm_slave_mon.burstcount    ),
-  .byteenable_i               ( amm_slave_mon.byteenable    ),
+  .start_test_i       ( start_test          ),
 
-  .start_test_i               ( start_test ),
+  .meas_block_busy_o  ( meas_block_busy     ),
 
-  .trans_block_busy_o         ( trans_block_busy ),
-
-  .sum_delay_o                ( csr_registers[13] ),
-  .min_delay_o                ( csr_registers[12][31 : 16] ),
-  .max_delay_o                ( csr_registers[12][15 : 0]  ),
-  .read_ticks_o               ( csr_registers[10] ),
-  .read_words_count_o         ( csr_registers[11] ),
-
-  .write_ticks_o              ( csr_registers[18] ),
-  .write_units_o              ( csr_registers[19] ),
-
-  .rd_req_cnt_o               ( csr_registers[14] ),
-
-  .start_test_o               ( start_test        ),
-  .test_param_reg_o           ( test_param[3 : 1] ) 
+  .wr_ticks_o         ( csr_registers[8]    ),
+  .wr_units_o         ( csr_registers[9]    ),
+  .rd_ticks_o         ( csr_registers[10]   ),
+  .rd_words_o         ( csr_registers[11]   ),
+  .min_max_delay_o    ( csr_registers[12]   ),
+  .sum_delay_o        ( csr_registers[13]   ),
+  .rd_req_amount_o    ( csr_registers[14]   )
 );
 
 endmodule : mem_checker

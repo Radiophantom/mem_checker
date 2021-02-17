@@ -1,4 +1,4 @@
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module transmitter_block( 
   input                               rst_i,
@@ -6,7 +6,7 @@ module transmitter_block(
 
   // Address block interface
   input                               op_valid_i,
-  input  trans_struct_t               op_pkt_i,
+  input  trans_pkt_t               op_pkt_i,
 
   input         [2 : 1] [31 : 0]      test_param_reg_i,
   
@@ -17,7 +17,7 @@ module transmitter_block(
   input                               error_check_i,
 
   output logic                        cmp_pkt_en_o,
-  output cmp_struct_t                 cmp_pkt_o,
+  output cmp_pkt_t                 cmp_pkt_o,
 
   // Avalon-MM output interface
   input                               readdatavalid_i,
@@ -59,16 +59,16 @@ logic [AMM_BURST_W - 1 : 0] burstcount_exp;
 
 assign data_ptrn_reg      = test_param_reg_i[2][7 : 0];
 assign burstcount_reg     = test_param_reg_i[1][AMM_BURST_W - 2 : 0];
-assign data_ptrn_mode_reg = test_param_reg_i[1][12];
-assign test_mode_reg      = test_param_reg_i[1][17 : 16];
+assign data_ptrn_mode_reg = data_mode_t'( test_param_reg_i[1][12] );
+assign test_mode_reg      = test_mode_t'( test_param_reg_i[1][17 : 16] );
 
 // variables declaration
 logic [AMM_BURST_W - 1 : 0] burst_cnt;
 logic                       wr_unit_complete_stb;
 logic                       start_trans_stb;
 logic                       last_trans_flg;
-cmp_struct_t                storage_op_pkt;
-cmp_struct_t                cur_op_pkt;
+cmp_pkt_t                storage_op_pkt;
+cmp_pkt_t                cur_op_pkt;
 logic                       low_burst_en_flg;
 logic                       high_burst_en_flg;
 logic                       pkt_storage_valid;
@@ -120,7 +120,7 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( start_trans_stb )
-    address_o <= storage_op_pkt.word_addr;
+    address_o <= 32'( storage_op_pkt.word_addr );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -278,5 +278,6 @@ always_ff @( posedge clk_i )
 assign rnd_data_gen_bit     = ( rnd_data_reg[6] ^ rnd_data_reg[1] ^ rnd_data_reg[0] );
 assign wr_unit_complete_stb = ( write_o && !waitrequest_i               );
 assign start_trans_stb      = ( cmd_accept_ready_o && pkt_storage_valid && !error_check_i );
+assign trans_block_busy_o   = ( !cmd_accept_ready_o );
 
 endmodule : transmitter_block

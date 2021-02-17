@@ -1,4 +1,4 @@
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module control_block(
   input                         rst_i,
@@ -17,9 +17,10 @@ module control_block(
   input                         cmd_accept_ready_i,
 
   output logic                  wr_result_o,
+  output logic                  test_result_o,
 
   output logic                  op_valid_o,
-  output trans_struct_t         op_pkt_o
+  output trans_pkt_t            op_pkt_o
 );
 
 localparam int RND_ADDR_W = $bits( rnd_addr_reg );
@@ -32,8 +33,8 @@ logic [AMM_BURST_W - 2 : 0]         burstcount_csr_reg;
 logic [ADDR_W - 1 : 0]              fix_addr_csr_reg;
 
 assign test_count_reg     = test_param_reg_i[1][31 : 16];
-assign test_mode_reg      = test_param_reg_i[1][15 : 14];
-assign addr_mode_reg      = test_param_reg_i[1][13 : 11];
+assign test_mode_reg      = test_mode_t'( test_param_reg_i[1][15 : 14] );
+assign addr_mode_reg      = addr_mode_t'( test_param_reg_i[1][13 : 11] );
 assign burstcount_csr_reg = test_param_reg_i[1][AMM_BURST_W - 2 : 0];
 assign fix_addr_csr_reg   = test_param_reg_i[2][ADDR_W - 1 : 0];
 
@@ -55,7 +56,7 @@ logic                               cmd_accepted_stb;
 logic [ADDR_B_W - 1 : 0]            start_offset;
 logic [ADDR_B_W - 1 : 0]            end_offset;
 
-logic [ADDR_B_W - 1 : 0]            low_burst_bits;
+logic [ADDR_B_W : 0]            low_burst_bits;
 logic [ADDR_W - 1 : 0]              decoded_addr;
 
 enum logic [2:0] {
@@ -163,7 +164,7 @@ always_ff @( posedge clk_i )
 always_ff @( posedge clk_i )
   if( addr_mode_reg == RUN_0_ADDR )
     if( start_test_i )
-      run_0_reg <= { ADDR_W{ 1'b1 } } - 1'b1;
+      run_0_reg <= { {(ADDR_W-1){ 1'b1 }}, 1'b0 };
     else
       if( next_addr_stb )
         run_0_reg <= { run_0_reg[ADDR_W - 2 : 0], run_0_reg[ADDR_W - 1] };
@@ -171,7 +172,7 @@ always_ff @( posedge clk_i )
 always_ff @( posedge clk_i )
   if( addr_mode_reg == RUN_1_ADDR )
     if( start_test_i )
-      run_1_reg <= { ADDR_W{ 1'b0 } } + 1'b1;
+      run_1_reg <= { {(ADDR_W-1){ 1'b0 }}, 1'b1 };
     else
       if( next_addr_stb )
         run_1_reg <= { run_1_reg[ADDR_W - 2 : 0], run_1_reg[ADDR_W - 1] };
@@ -185,7 +186,7 @@ always_ff @( posedge clk_i )
         inc_addr_reg <= inc_addr_reg + 1'b1;
 
 always_comb
-  case( test_mode_reg )
+  case( addr_mode_reg )
     FIX_ADDR    : decoded_addr = fix_addr_reg;
     RND_ADDR    : decoded_addr = rnd_addr_reg[ADDR_W - 1 : 0];
     RUN_0_ADDR  : decoded_addr = run_0_reg;
@@ -253,6 +254,16 @@ always_ff @( posedge clk_i, posedge rst_i )
     wr_result_o <= 1'b0;
   else
     wr_result_o <= ( test_complete_state && test_complete_flg );
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    test_result_o <= 1'b0;
+  else
+    if( start_test_i )
+      test_result_o <= 1'b0;
+    else
+      if( err_check_i )
+        test_result_o <= 1'b1;
 
 assign trans_en_state       = ( state == WRITE_ONLY_S ) ||
                               ( state == READ_ONLY_S  ) ||

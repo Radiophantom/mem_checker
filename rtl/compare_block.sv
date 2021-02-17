@@ -1,4 +1,4 @@
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module compare_block(
   input                               clk_i,
@@ -10,38 +10,39 @@ module compare_block(
   input                               readdatavalid_i,
   input         [AMM_DATA_W - 1 : 0]  readdata_i,
 
-  // transmitter block interface
   input                               cmp_pkt_en_i,
-  input  cmp_struct_t                 cmp_pkt_i,
+  input  cmp_pkt_t                    cmp_pkt_i,
 
-  // result block interface
-  output logic                        error_check_o,
-  output logic  [ADDR_W - 1 : 0]      check_err_addr_o,
+  output logic                        err_check_o,
+  output logic  [ADDR_W - 1 : 0]      err_addr_o,
+  output logic  [7 : 0]               err_data_o,
+  output logic  [7 : 0]               orig_data_o,
 
   output logic                        cmp_block_busy_o
 );
 
-function automatic logic [DATA_B_W - 1 : 0] check_ptrn_set(
-  input logic [DATA_B_W - 1 : 0]    check_ptrn,
-  input logic [7 : 0]               data_ptrn,
-  input logic [AMM_DATA_W - 1 : 0]  readdata
+function automatic logic [DATA_B_W - 1 : 0] check_ptrn_func(
+  logic [DATA_B_W - 1 : 0]    check_ptrn,
+  logic [7 : 0]               data_ptrn,
+  logic [AMM_DATA_W - 1 : 0]  readdata
 );
   for( int i = 0; i < DATA_B_W; i++ )
     if( check_ptrn[i] )
-      check_ptrn_set[i] = ( data_ptrn != readdata[7 + i*8 -: 8] );
+      check_ptrn_func[i] = ( data_ptrn != readdata[7 + i*8 -: 8] );
     else
-      check_ptrn_set[i] = 1'b0;
-endfunction : check_ptrn_set
+      check_ptrn_func[i] = 1'b0;
+endfunction : check_ptrn_func
 
-function automatic logic [ADDR_B_W - 1 : 0] err_byte_num(
-  input logic [DATA_B_W - 1 : 0] check_vec
+function automatic logic [ADDR_B_W - 1 : 0] err_byte_num_func(
+  logic [DATA_B_W - 1 : 0] check_ptrn
 );
   for( int i = 0; i < DATA_B_W; i++ )
-    if( check_vec[i] )
-      err_byte_num = i;
-endfunction : err_byte_num
+    if( check_ptrn[i] )
+      return( i );
+  return( 0 );
+endfunction : err_byte_num_func
 
-cmp_struct_t              storage_pkt, cur_pkt;
+cmp_pkt_t                 storage_pkt, cur_pkt;
 logic                     storage_valid;
 logic                     stop_checker_flg;
 logic                     check_complete_stb;
@@ -56,6 +57,9 @@ logic                     readdatavalid_dly;
 logic [7 : 0]             data_ptrn_reg;
 logic [DATA_B_W - 1 : 0]  check_ptrn_vec;
 logic [7 : 0]             data_gen_reg;
+
+logic [AMM_DATA_W - 1 : 0] readdata_dly;
+logic [7 : 0] check_data_ptrn;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -122,6 +126,22 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( readdatavalid_i )
+    readdata_dly <= readdata_i;
+
+always_ff @( posedge clk_i )
+  if( readdatavalid_i )
+    check_data_ptrn <= data_ptrn_reg;
+
+always_ff @( posedge clk_i )
+  if( readdatavalid_dly && err_check_result )
+    err_data_o <= readdata_dly[7 + 8 * ( err_byte_num_func( check_vector ) ) -: 8];
+
+always_ff @( posedge clk_i )
+  if( readdatavalid_dly && err_check_result )
+    orig_data_o <= check_data_ptrn;
+
+always_ff @( posedge clk_i )
+  if( readdatavalid_i )
     check_addr_reg <= check_addr_cnt;
 
 always_ff @( posedge clk_i )
@@ -155,15 +175,15 @@ always_ff @( posedge clk_i )
         data_ptrn_reg <= { data_ptrn_reg[6:0], data_gen_bit };
 
 always_ff @( posedge clk_i )
-  error_check_o <= ( readdatavalid_dly && err_check_result );
+  err_check_o <= ( readdatavalid_dly && err_check_result );
 
 always_ff @( posedge clk_i )
   if( readdatavalid_i )
-    check_vector <= check_ptrn_set( check_ptrn_vec, data_ptrn_reg, readdata_i );
+    check_vector <= check_ptrn_func( check_ptrn_vec, data_ptrn_reg, readdata_i );
 
 always_ff @( posedge clk_i )
   if( readdatavalid_dly && err_check_result )
-    check_err_addr_o <= { check_addr_reg, err_byte_num( check_vector ) };
+    err_addr_o <= { check_addr_reg, err_byte_num_func( check_vector ) };
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -171,8 +191,8 @@ always_ff @( posedge clk_i, posedge rst_i )
   else
     cmp_block_busy_o <= ( storage_valid || in_process_flg );
 
-assign err_check_result   = &( check_vector );
-assign data_gen_bit       = ( data_gen_reg[6] ^ data_gen_reg[1] ^ data_gen_reg[0] );
+assign err_check_result   = ( &check_vector );
+assign data_gen_bit       = ( data_ptrn_reg[6] ^ data_ptrn_reg[1] ^ data_ptrn_reg[0] );
 
 assign check_complete_stb = ( last_word_flg && readdatavalid_i );
 assign load_checker_stb   = ( !in_process_flg || check_complete_stb ) ? ( storage_valid ) : 1'b0;

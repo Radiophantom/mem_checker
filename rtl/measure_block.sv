@@ -1,11 +1,11 @@
-import settings_pkg::*;
+import rtl_settings_pkg::*;
 
 module measure_block( 
   input                               rst_i,
   input                               clk_i,
 
   // Avalon-MM interface
-  input                               rddatavalid_i,
+  input                               readdatavalid_i,
   input                               waitrequest_i,
 
   input                               read_i,
@@ -16,250 +16,224 @@ module measure_block(
   // CSR interface
   input                               start_test_i,
 
-  output logic                        trans_block_busy_o,
-
-  output logic  [31:0]                sum_delay_o,
-  output logic  [15:0]                min_delay_o,
-  output logic  [15:0]                max_delay_o,
-  output logic  [31:0]                rd_req_cnt_o,
-  output logic  [31:0]                rd_ticks_o,
-  output logic  [31:0]                rd_words_count_o,
+  output logic                        meas_block_busy_o,
 
   output logic  [31:0]                wr_ticks_o,
-  output logic  [31:0]                wr_units_count_o
+  output logic  [31:0]                wr_units_o,
+  output logic  [31:0]                rd_ticks_o,
+  output logic  [31:0]                rd_words_o,
+  output logic  [31:0]                min_max_delay_o,
+  output logic  [31:0]                sum_delay_o,
+  output logic  [31:0]                rd_req_amount_o
 );
 
-localparam CNT_NUM  = 4;
+localparam CNT_NUM  = 4; // amount of cnt for concurrent delay count
 localparam CNT_W    = $clog2( CNT_NUM );
 
-function automatic logic [ADDR_B_W : 0] byte_amount_count(
-  input logic [DATA_B_W - 1 : 0] byteenable_vec
+function automatic logic [ADDR_B_W : 0] bytes_count_func(
+  logic [DATA_B_W - 1 : 0] byteenable
 );
   for( int i = 0; i < DATA_B_W; i++ )
-    if( byteenable_vec[i] )
-      byte_amount_count++;
-endfunction : byte_amount_count
+    if( byteenable[i] )
+      bytes_count_func++;
+endfunction : bytes_count_func
 
-logic unsigned [CNT_W - 1 : 0] act_cnt_num, load_cnt_num;
-logic last_word_flag;
-logic rd_mode_active;
-logic wr_stb;
-logic rd_stb;
+logic                 rd_req_flag;
+logic                 rd_req_stb;
+logic                 wr_unit_stb;
+logic                 last_rd_word_stb;
+logic                 save_delay_stb;
 
-logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0] word_cnt_vec;
-logic [CNT_NUM - 1 : 0] last_word_vec;
-logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0] act_delay_cnt_vec;
-logic [CNT_W - 1 : 0] prev_cnt_num;
-logic [ ] act_cnt_vec;
-logic delay_cnt_vec;
-logic wr_delay_stb;
+logic [CNT_W - 1 : 0] load_cnt_num;
+logic [CNT_W - 1 : 0] active_cnt_num;
+logic [CNT_W - 1 : 0] save_cnt_num;
+
+logic [15 : 0]        min_delay;
+logic [15 : 0]        max_delay;
+
+
+logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
+logic [CNT_NUM - 1 : 0]                       last_rd_word_reg;
+logic [CNT_NUM - 1 : 0]                       delay_cnt_reg;
+logic [CNT_NUM - 1 : 0]                       trans_cnt_reg;
+logic [CNT_NUM - 1 : 0][15 : 0]               delay_cnt_array;
+logic [CNT_NUM - 1 : 0][31 : 0]               trans_cnt_array;
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    rd_req_flag <= 1'b0;
+  else
+    if( read_i )
+      if( !waitrequest_i )
+        rd_req_flag <= 1'b0;
+      else
+        rd_req_flag <= 1'b1;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     load_cnt_num <= CNT_W'( 0 );
   else
-    if( rd_stb )
+    if( rd_req_stb )
       load_cnt_num <= load_cnt_num + 1'b1;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    act_cnt_num <= CNT_W'( 0 );
+    active_cnt_num <= CNT_W'( 0 );
   else
-    if( last_word_flag )
-      act_cnt_num <= act_cnt_num + 1'b1;
+    if( last_rd_word_stb )
+      active_cnt_num <= active_cnt_num + 1'b1;
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    word_cnt_vec = ( CNT_NUM * AMM_BURST_W )'( 0 );
-  else
-    for( int i = 0; i < ( CNT_NUM - 1 ); i++ )
-      if( ( i == load_cnt_num ) && rd_stb )
-        word_cnt_vec[i] <= burstcount_i;
-      else
-        if( ( i == act_cnt_num ) && rddatavalid_i )
-          word_cnt_vec[i] <= word_cnt_vec[i] - 1'b1; 
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    last_word_vec <= CNT_NUM'( 0 );
-  else
-    for( int i = 0; i < ( CNT_NUM - 1 ); i++ )
-      if( rd_stb && ( i == load_cnt_num ) )
-        last_word_vec[i] <= ( burstcount_i == 1 );
-      else
-        if( rddatavalid_i && ( i == act_cnt_num ) )
-          last_word_vec[i] <= ( word_cnt_vec[i] == 2 );
-
-assign last_word_flag = last_word_vec[act_cnt_num] && rddatavalid_i;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    act_delay_cnt_vec <= CNT_NUM'( 0 );
-  else
-    for( int i = 0; i < ( CNT_NUM - 1 ); i++ )
-      if( rd_stb && ( i == load_cnt_num ) )
-        act_delay_cnt_vec[i] <= 1'b1;
-      else
-        if( rddatavalid_i && ( i == act_cnt_num ) )
-          act_delay_cnt_vec[i] <= 1'b0;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    act_cnt_vec <= CNT_NUM'( 0 );
-  else
-    for( int i = 0; i < ( CNT_NUM - 1 ); i++ )
-      if( rd_stb && ( i == load_cnt_num ) )
-        act_cnt_vec[i] <= 1'b1;
-      else
-        if( rddatavalid_i && ( i == act_cnt_num ) )
-          act_cnt_vec[i] <= 1'b0;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    delay_cnt_vec <= CNT_NUM'( 0 );
-  else
-    for( int i = 0; i < ( CNT_NUM - 1 ); i++ )
-      if( act_delay_cnt_vec[i] )
-        delay_cnt_vec[i] <= delay_cnt_vec[i] + 1'b1;
-      else
-        delay_cnt_vec[i] <= 32'( 0 );
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    prev_cnt_num <= CNT_W'( 0 );
-  else
-    if( last_word_flag )
-      prev_cnt_num <= act_cnt_num;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    wr_delay_stb <= 1'b0;
-  else
-    wr_delay_stb <= last_word_flag;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    rd_req_cnt_o <= 32'( 0 );
-  else
-    if( start_test_i )
-      rd_req_cnt_o <= 32'( 0 );
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      word_cnt_array[i] <= burstcount_i;
     else
-      if( wr_delay_stb )
-        rd_req_cnt_o <= rd_req_cnt_o + 1'b1;
+      if( readdatavalid_i && ( active_cnt_num == i ) )
+        word_cnt_array[i] <= word_cnt_array[i] - 1'b1; 
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    rd_words_count_o <= 32'( 0 );
-  else
-    if( start_test_i )
-      rd_words_count_o <= 32'( 0 );
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      last_rd_word_reg[i] <= ( burstcount_i == 1 );
     else
-      if( rddatavalid_i )
-        rd_words_count_o <= rd_words_count_o + 1'b1;
+      if( readdatavalid_i && ( active_cnt_num == i ) )
+        last_rd_word_reg[i] <= ( word_cnt_array[i] == 2 );
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    min_delay_o <= 16'hFF_FF;
-  else
-    if( start_test_i )
-      min_delay_o <= 16'hFF_FF;
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      delay_cnt_reg[i] <= 1'b1;
     else
-      if( wr_delay_stb && ( delay_cnt_vec[prev_cnt_num] < min_delay_o ) )
-        min_delay_o <= delay_cnt_vec[prev_cnt_num];
+      if( readdatavalid_i && ( active_cnt_num == i ) )
+        delay_cnt_reg[i] <= 1'b0;
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    max_delay_o <= 16'h0;
-  else
-    if( start_test_i )
-      max_delay_o <= 16'h0;
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      trans_cnt_reg[i] <= 1'b1;
     else
-      if( wr_delay_stb && ( delay_cnt_vec[prev_cnt_num] > max_delay_o ) )
-        max_delay_o <= delay_cnt_vec[prev_cnt_num];
+      if( last_rd_word_reg[i] && readdatavalid_i && ( active_cnt_num == i ) )
+        trans_cnt_reg[i] <= 1'b0;
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    sum_delay_o <= 32'( 0 );
-  else
-    if( start_test_i )
-      sum_delay_o <= 32'( 0 );
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      delay_cnt_array[i] <= 16'( 0 );
     else
-      if( wr_delay_stb )
-        sum_delay_o <= sum_delay_o + delay_cnt_vec[prev_cnt_num];
+      if( delay_cnt_reg[i] )
+        delay_cnt_array[i] <= delay_cnt_array[i] + 1'b1;
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
+always_ff @( posedge clk_i )
+  for( int i = 0; i < CNT_NUM; i++ )
+    if( rd_req_stb && ( load_cnt_num == i ) )
+      trans_cnt_array[i] <= 32'( 0 );
+    else
+      if( trans_cnt_reg[i] )
+        trans_cnt_array[i] <= trans_cnt_array[i] + 1'b1;
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    rd_req_amount_o <= 32'( 0 );
+  else
+    if( save_delay_stb )
+      rd_req_amount_o <= rd_req_amount_o + 1'b1;
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    rd_words_o <= 32'( 0 );
+  else
+    if( readdatavalid_i )
+      rd_words_o <= rd_words_o + 1'b1;
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
     rd_ticks_o <= 32'( 0 );
   else
-    if( start_test_i )
-      rd_ticks_o <= 32'( 0 );
-    else
-      if( rd_mode_active )
-        rd_ticks_o <= rd_ticks_o + 1'b1;
+    if( |trans_cnt_reg )
+      rd_ticks_o <= rd_ticks_o + 1'b1;
 
-assign rd_mode_active = ( |act_delay_cnt_vec );
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    wr_ticks_o <= 32'( 0 );
+  else
+    if( write_i )
+      wr_ticks_o <= wr_ticks_o + 1'b1;
+
+always_ff @( posedge clk_i )
+  if( last_rd_word_stb )
+    save_cnt_num <= active_cnt_num;
+
+always_ff @( posedge clk_i )
+  save_delay_stb <= last_rd_word_stb;
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    min_delay <= 16'hFF_FF;
+  else
+    if( save_delay_stb && ( delay_cnt_array[save_cnt_num] < min_delay ) )
+      min_delay <= delay_cnt_array[save_cnt_num];
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    max_delay <= 16'h0;
+  else
+    if( save_delay_stb && ( delay_cnt_array[save_cnt_num] > max_delay ) )
+      max_delay <= delay_cnt_array[save_cnt_num];
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    sum_delay_o <= 32'( 0 );
+  else
+    if( save_delay_stb )
+      sum_delay_o <= sum_delay_o + delay_cnt_array[save_cnt_num];
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    wr_ticks_o <= 32'( 0 );
+    meas_block_busy_o <= 1'b0;
   else
-    if( start_test_i )
-      wr_ticks_o <= 32'( 0 );
-    else
-      if( write_i )
-        wr_ticks_o <= wr_ticks_o + 1'b1;
-
-assign wr_stb = ( write_i && !waitrequest_i );
+    meas_block_busy_o <= ( |trans_cnt_reg );
 
 generate
-  if( ADDR_TYPE == BYTE )
+  if( ADDR_TYPE == "BYTE" )
     begin : byte_address
 
-      logic [BYTE_ADDR_W : 0] byte_amount;
-      logic                   delayed_wr_stb;
+      logic [ADDR_B_W : 0] bytes_amount;
+      logic                wr_dly_stb;
 
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          byte_amount <= ( BYTE_ADDR_W + 1 )'( 0 );
-        else
-          if( start_test_i )
-            byte_amount <= ( BYTE_ADDR_W + 1 )'( 0 );
-          else
-            if( wr_stb )
-              byte_amount <= byte_amount_func( byteenable_i );
+      always_ff @( posedge clk_i )
+        if( wr_unit_stb )
+          bytes_amount <= bytes_count_func( byteenable_i );
 
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          delayed_wr_stb <= 1'b0;
-        else
-          delayed_wr_stb <= wr_stb;
+      always_ff @( posedge clk_i )
+        wr_dly_stb <= wr_unit_stb;
 
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          wr_units_count_o <= 32'( 0 );
+      always_ff @( posedge clk_i )
+        if( start_test_i )
+          wr_units_o <= 32'( 0 );
         else
-          if( start_test_i )
-            wr_units_count_o <= 32'( 0 );
-          else
-            if( delayed_wr_stb )
-              wr_units_count_o <= wr_units_count_o + byte_amount;
+          if( wr_dly_stb )
+            wr_units_o <= wr_units_o + bytes_amount;
+
     end
   else
-    if( ADDR_TYPE == WORD )
+    if( ADDR_TYPE == "WORD" )
       begin : word_address
 
-        always_ff @( posedge clk_i, posedge rst_i )
-          if( rst_i )
-            wr_units_count_o <= 32'( 0 );
+        always_ff @( posedge clk_i )
+          if( start_test_i )
+            wr_units_o <= 32'( 0 );
           else
-            if( start_test_i )
-              wr_units_count_o <= 32'( 0 );
-            else
-              if( wr_stb )
-                wr_units_count_o <= wr_units_count_o + 1'b1;
+            if( wr_unit_stb )
+              wr_units_o <= wr_units_o + 1'b1;
+
       end
 endgenerate 
 
-assign rd_stb = ( read_i && !waitrequest_i ); 
+assign rd_req_stb       = ( read_i  && ( !rd_req_flag   ) );
+assign wr_unit_stb      = ( write_i && ( !waitrequest_i ) );
 
-endmodule
+assign last_rd_word_stb = last_rd_word_reg[active_cnt_num] && readdatavalid_i;
+
+assign min_max_delay_o  = { min_delay, max_delay };
+
+endmodule : measure_block
