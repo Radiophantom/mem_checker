@@ -142,8 +142,8 @@ always_ff @( posedge clk_i )
   if( start_test_i )
     rd_words_o <= 32'( 0 );
   else
-    if( readdatavalid_i )
-      rd_words_o <= rd_words_o + 1'b1;
+    if( read_i && readdatavalid_i )
+      rd_words_o <= rd_words_o + burstcount_i;
 
 always_ff @( posedge clk_i )
   if( start_test_i )
@@ -193,41 +193,47 @@ always_ff @( posedge clk_i, posedge rst_i )
   else
     meas_block_busy_o <= ( |trans_cnt_reg );
 
-generate
-  if( ADDR_TYPE == "BYTE" )
-    begin : byte_address
-
-      logic [ADDR_B_W : 0] bytes_amount;
-      logic                wr_dly_stb;
-
-      always_ff @( posedge clk_i )
-        if( wr_unit_stb )
-          bytes_amount <= bytes_count_func( byteenable_i );
-
-      always_ff @( posedge clk_i )
-        wr_dly_stb <= wr_unit_stb;
-
-      always_ff @( posedge clk_i )
-        if( start_test_i )
-          wr_units_o <= 32'( 0 );
-        else
-          if( wr_dly_stb )
-            wr_units_o <= wr_units_o + bytes_amount;
-
-    end
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    wr_units_o <= 32'( 0 );
   else
-    if( ADDR_TYPE == "WORD" )
-      begin : word_address
+    if( wr_unit_stb )
+      wr_units_o <= wr_units_o + burstcount_i;
+//generate
+//  if( ADDR_TYPE == "BYTE" )
+//    begin : byte_address
 
-        always_ff @( posedge clk_i )
-          if( start_test_i )
-            wr_units_o <= 32'( 0 );
-          else
-            if( wr_unit_stb )
-              wr_units_o <= wr_units_o + 1'b1;
+//      logic [ADDR_B_W : 0] bytes_amount;
+//      logic                wr_dly_stb;
 
-      end
-endgenerate 
+//      always_ff @( posedge clk_i )
+//        if( wr_unit_stb )
+//          bytes_amount <= bytes_count_func( byteenable_i );
+
+//      always_ff @( posedge clk_i )
+//        wr_dly_stb <= wr_unit_stb;
+
+//      always_ff @( posedge clk_i )
+//        if( start_test_i )
+//          wr_units_o <= 32'( 0 );
+//        else
+//          if( wr_dly_stb )
+//            wr_units_o <= wr_units_o + bytes_amount;
+
+//    end
+//  else
+//    if( ADDR_TYPE == "WORD" )
+//      begin : word_address
+
+//        always_ff @( posedge clk_i )
+//          if( start_test_i )
+//            wr_units_o <= 32'( 0 );
+//          else
+//            if( wr_unit_stb )
+//              wr_units_o <= wr_units_o + 1'b1;
+
+//      end
+//endgenerate 
 
 assign rd_req_stb       = ( read_i  && ( !rd_req_flag   ) );
 assign wr_unit_stb      = ( write_i && ( !waitrequest_i ) );

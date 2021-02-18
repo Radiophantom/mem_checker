@@ -48,4 +48,4 @@ modport slave(
   output waitrequest
 );
 
-endinterface
+endinterface : amm_if

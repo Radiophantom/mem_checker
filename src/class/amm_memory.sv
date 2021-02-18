@@ -10,8 +10,6 @@ bit [7 : 0] rd_data [$];
 bathtube_distribution   bath_dist_obj;
 err_struct_t            err_struct;
 
-err_
-
 int cur_transaction_num = 0;
 int err_transaction_num = 0;
 
