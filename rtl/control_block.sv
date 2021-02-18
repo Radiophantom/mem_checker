@@ -236,18 +236,7 @@ always_ff @( posedge clk_i )
 always_ff @( posedge clk_i )
   if( trans_en_state )
     if( !op_valid_o || cmd_accepted_stb )
-    begin
-      if( ADDR_TYPE == "BYTE" )
-        begin
-          op_pkt_o.word_addr      <= { decoded_addr[ADDR_W - 1 : ADDR_B_W], ADDR_B_W'( 0 ) };
-          op_pkt_o.low_burst_bits   <= low_burst_bits;
-          op_pkt_o.start_offset     <= start_offset;
-          op_pkt_o.end_offset       <= end_offset;
-        end
-      else
-        if( ADDR_TYPE == "WORD" )
-          op_pkt_o.word_addr    <= decoded_addr;
-    end
+      op_pkt_o.word_addr    <= decoded_addr;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -265,13 +254,10 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( err_check_i )
         test_result_o <= 1'b1;
 
-assign trans_en_state       = ( state == WRITE_ONLY_S ) ||
-                              ( state == READ_ONLY_S  ) ||
-                              ( state == WRITE_WORD_S ) ||
-                              ( state == READ_WORD_S  );
+assign trans_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S  ) ||
+                              ( state == WRITE_WORD_S ) || ( state == READ_WORD_S  );
 
-assign cnt_en_state         = ( state == READ_ONLY_S  ) ||
-                              ( state == WRITE_ONLY_S ) ||
+assign cnt_en_state         = ( state == READ_ONLY_S  ) || ( state == WRITE_ONLY_S ) ||
                               ( state == READ_WORD_S  );
 
 assign next_addr_stb        = ( cnt_en_state && ( !op_valid_o || cmd_accepted_stb ) );
@@ -279,12 +265,6 @@ assign next_addr_stb        = ( cnt_en_state && ( !op_valid_o || cmd_accepted_st
 assign test_complete_state  = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
 assign cmd_accepted_stb     = ( op_valid_o && cmd_accept_ready_i );
-
-assign low_burst_bits       = (ADDR_B_W + 1)'( burstcount_csr_reg[ADDR_B_W - 1 : 0] + decoded_addr[ADDR_B_W - 1 : 0] );
-
-assign start_offset         = decoded_addr[ADDR_B_W - 1 : 0];
-
-assign end_offset           = decoded_addr[ADDR_B_W - 1 : 0] + burstcount_csr_reg[ADDR_B_W - 1 : 0];
 
 assign test_complete_flg    = ( !cmp_block_busy_i && !meas_block_busy_i && !trans_block_busy_i );
 
