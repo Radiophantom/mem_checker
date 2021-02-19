@@ -38,15 +38,13 @@ logic cmp_block_busy;
 logic trans_block_busy;
 logic meas_block_busy;
 logic cmd_accepted;
-logic cmp_pkt_en;
 
 logic start_test;
-logic op_valid;
 
 csr_block csr_block_inst( 
-  .rst_i            ( rst_i                 ),
-  .clk_sys_i        ( clk_sys_i             ),
-  .clk_mem_i        ( clk_mem_i             ),
+  .rst_i            ( rst_i            ),
+  .clk_sys_i        ( clk_sys_i        ),
+  .clk_mem_i        ( clk_mem_i        ),
 
   .read_i           ( sys_read_i       ),
   .write_i          ( sys_write_i      ),
@@ -86,34 +84,42 @@ control_block control_block_inst(
 
   .test_param_reg_i   ( csr_registers[3 : 1]  ),
 
-  .cmd_accept_ready_i ( cmd_accepted          ),
+  .in_process_i       ( in_process            ),
 
   .wr_result_o        ( wr_result             ),
   .test_result_o      ( test_result           ),
 
-  .op_valid_o         ( op_valid              ),
-  .op_pkt_o           ( op_pkt                )
+  .trans_valid_o      ( trans_valid           ),
+  .trans_addr_o       ( trans_addr            ),
+  .trans_type_o       ( trans_type            )
 );
 
-trans_pkt_t op_pkt;
-cmp_pkt_t cmp_pkt;
+cmp_struct_t      cmp_struct;
+logic             cmp_struct_en;
+
+logic                   trans_valid;
+logic [ADDR_W - 1 : 0]  trans_addr;
+logic                   trans_type;
+
+logic                   in_process;
 
 transmitter_block transmitter_block_inst( 
   .rst_i              ( rst_i                 ),
   .clk_i              ( clk_mem_i             ),
 
-  .op_valid_i         ( op_valid              ),
-  .op_pkt_i           ( op_pkt                ),
+  .trans_valid_i      ( trans_valid           ),
+  .trans_addr_i       ( trans_addr            ),
+  .trans_type_i       ( trans_type            ),
 
   .test_param_reg_i   ( csr_registers[3 : 1]  ),
 
-  .cmd_accept_ready_o ( cmd_accepted          ),
+  .in_process_o       ( in_process            ),
   .trans_block_busy_o ( trans_block_busy      ),
 
   .error_check_i      ( err_check             ),
 
-  .cmp_pkt_en_o       ( cmp_pkt_en            ),
-  .cmp_pkt_o          ( cmp_pkt               ),
+  .cmp_struct_en_o    ( cmp_struct_en         ),
+  .cmp_struct_o       ( cmp_struct            ),
 
   .readdatavalid_i    ( mem_readdatavalid_i ),
   .readdata_i         ( mem_readdata_i      ),
@@ -136,8 +142,8 @@ compare_block compare_block_inst(
   .readdatavalid_i  ( mem_readdatavalid_i       ),
   .readdata_i       ( mem_readdata_i            ),
 
-  .cmp_pkt_en_i     ( cmp_pkt_en                ),
-  .cmp_pkt_i        ( cmp_pkt                   ),
+  .cmp_struct_en_i  ( cmp_struct_en             ),
+  .cmp_struct_i     ( cmp_struct                ),
 
   .err_check_o      ( err_check                 ),
   .err_addr_o       ( csr_registers[6]          ),
