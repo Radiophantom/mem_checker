@@ -22,6 +22,9 @@ module transmitter_block(
   output cmp_pkt_t                    cmp_pkt_o,
 
   // Avalon-MM output interface
+  //amm_if.master #( .ADDR_W( AMM_ADDR_W ),
+  //                 .DATA_W( AMM_DATA_W ),
+  //                 .BURST_W( AMM_BURST_W ) );
   input                               readdatavalid_i,
   input         [AMM_DATA_W - 1 : 0]  readdata_i,
   input                               waitrequest_i,
@@ -50,14 +53,13 @@ function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
     endcase
 endfunction : byteenable_ptrn
 
-// csr registers casting
 data_mode_t                 data_mode;
 test_mode_t                 test_mode;
 
 logic [AMM_BURST_W - 1 : 0] burstcount_reg;
 logic [7 : 0]               data_ptrn_reg;
-logic                       rnd_data_gen_bit;
-logic [7 : 0]               rnd_data_reg = 8'hFF;
+logic                       data_gen_bit;
+logic [7 : 0]               rnd_data = 8'hFF;
 logic [AMM_BURST_W - 1 : 0] burstcount_exp;
 
 assign data_ptrn      = test_param_reg_i[2][7 : 0];
@@ -70,8 +72,8 @@ logic [AMM_BURST_W - 1 : 0] burst_cnt;
 logic                       wr_unit_stb;
 logic                       start_stb;
 logic                       last_word_flag;
-logic                       low_burst_en_flg;
-logic                       high_burst_en_flg;
+logic                       low_burst_en;
+logic                       high_burst_en;
 logic                       pkt_storage_valid;
 
 struct packed{
@@ -84,45 +86,72 @@ struct packed{
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
+    in_process_o <= 1'b0;
+  else
+    if( start_stb )
+      in_process_o <= 1'b1;
+    else
+      if( in_process_o  && !waitrequest_i )
+        if( cur_struct.trans_type )
+          in_process_o <= 1'b0;
+        else
+          if( last_word_flag )
+            in_process_o <= 1'b0;
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
     storage_valid <= 1'b0;
   else
     if( error_check_i )
       storage_valid <= 1'b0;
     else
-      if( in_process_o )
+      if( !in_process_o )
         storage_valid <= trans_valid_i;
 
 always_ff @( posedge clk_i )
   if( start_stb )
     cur_struct <= storage_struct;
 
+logic [ADDR_B_W : 0] low_burst_bits;
+
 generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
-      if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
-        begin : less_than_burst_bits
 
-          assign low_addr_bits = ( ( ADDR_B_W + 1 )'( burstcount_reg[AMM_BURST_W - 2 : 0] + trans_addr_i[ADDR_B_W - 1 : 0] ) );
+          always_ff @( posedge clk_i )
+            if( trans_valid_i && ( !in_process_o ) )
+              begin
+                storage_struct.start_addr   <= { trans_addr_i[ADDR_W - 1 : ADDR_B_W], ADDR_B_W'( 0 ) };
+                storage_struct.trans_type   <= trans_type_i;
+                storage_struct.start_offset <= trans_addr_i   [ADDR_B_W - 1 : 0];
+                storage_struct.end_offset   <= low_burst_bits [ADDR_B_W - 1 : 0];
+              end
+
+
+      if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
+        begin : more_burst_width
+
+          assign low_burst_bits = ( ADDR_B_W + 1 )'( burstcount_reg[ADDR_B_W - 1 : 0] + trans_addr_i[ADDR_B_W - 1 : 0] );
 
           always_ff @( posedge clk_i )
             if( start_test_i )
-              high_burst_en_flg <= ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] != 0 );
+              high_burst_en <= ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] != 0 );
 
           always_ff @( posedge clk_i )
-            if( in_process_o && op_valid_i )
-              low_burst_en_flg <= ( low_addr_bits >= DATA_B_W );
+            if( trans_valid_i && ( !in_process_o ) )
+              low_burst_en <= ( low_burst_bits[ADDR_B_W] == 1'b1 );
 
           always_ff @( posedge clk_i )
             if( start_stb )
               if( storage_struct.trans_type )
                 byteenable_o <= '1;
               else
-                byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_offset, ( high_burst_en_flg || low_burst_en_flg ),  storage_struct.end_offset );
+                byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_offset, ( high_burst_en || low_burst_en ),  storage_struct.end_offset );
             else
               if( wr_unit_stb )
                 byteenable_o <= byteenable_ptrn( 1'b0, cur_struct.start_offset, last_word_flag, cur_struct.end_offset );
 
-            assign burstcount_exp = ( low_burst_en_flg ) ?  ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] + 2'd2 ) :
+            assign burstcount_exp = ( low_burst_en ) ?  ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] + 2'd2 ) :
                                                             ( burstcount_reg[AMM_BURST_W - 2 : ADDR_B_W] + 2'd1 );
         end
       else
@@ -130,15 +159,14 @@ generate
           if( ( AMM_BURST_W - 1 ) <= ADDR_B_W )
             begin : more_than_burst_width
 
-              logic [ADDR_B_W - 1 : 0] low_addr_bits;
-
-              assign low_addr_bits = ( burstcount_reg[AMM_BURST_W - 2 : 0] + trans_addr_i[ADDR_B_W - 1 : 0] );
+              logic [ADDR_B_W - 1 : 0] low_burst_bits;
+              assign low_burst_bits = ( ( ADDR_B_W + 1 )'( burstcount_reg[AMM_BURST_W - 2 : 0] + trans_addr_i[ADDR_B_W - 1 : 0] ) );
 
               always_ff @( posedge clk_i )
                 if( in_process_o && op_valid_i )
-                  low_burst_en_flg <= ( low_addr_bits >= DATA_B_W );
+                  low_burst_en <= ( low_burst_bits >= DATA_B_W );
 
-              assign burstcount_exp = ( low_burst_en_flg ) ?  ( AMM_BURST_W'( 2 ) ):
+              assign burstcount_exp = ( low_burst_en ) ?  ( AMM_BURST_W'( 2 ) ):
                                                               ( AMM_BURST_W'( 1 ) );
 
 
@@ -153,10 +181,6 @@ generate
             if( AMM_BURST_W <= ADDR_B_W )
               begin : much_more_than_burst_width
 
-                logic [ADDR_B_W - 1 : 0] low_addr_bits;
-
-                assign low_addr_bits  = ( burstcount_reg[AMM_BURST_W - 2 : 0] + trans_addr_i[ADDR_B_W - 1 : 0] );
-
                 assign burstcount_exp = AMM_BURST_W'( 1 );
 
                 always_ff @( posedge clk_i )
@@ -170,15 +194,6 @@ generate
         end
 
       logic [DATA_B_W - 1 : 0]            byteenable_exp;
-
-      always_ff @( posedge clk_i )
-        if( in_process_o && op_valid_i )
-          begin
-            storage_struct.start_addr         <= { trans_addr_i[ADDR_W - 1 : ADDR_B_W], ADDR_B_W'( 0 ) };
-            storage_struct.trans_type   <= trans_type_i;
-            storage_struct.start_offset <= trans_addr_i [ADDR_B_W - 1 : 0];
-            storage_struct.end_offset   <= low_addr_bits[ADDR_B_W - 1 : 0];
-          end
 
       always_ff @( posedge clk_i )
         if( start_stb )
@@ -209,13 +224,13 @@ generate
         always_ff @( posedge clk_i )
           if( in_process_o && op_valid_i )
             begin
-              storage_struct.start_addr         <= trans_addr_i;
+              storage_struct.start_addr   <= trans_addr_i;
               storage_struct.trans_type   <= trans_type_i;
             end
 
         always_ff @( posedge clk_i )
           if( start_test_i )
-            high_burst_en_flg <= ( burstcount_reg != 0 );
+            high_burst_en <= ( burstcount_reg != 0 );
 
         always_ff @( posedge clk_i )
           if( start_stb )
@@ -239,19 +254,6 @@ endgenerate
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    in_process_o <= 1'b0;
-  else
-    if( start_stb )
-      in_process_o <= 1'b1;
-    else
-      if( in_process_o )
-        if( cur_struct.trans_type )
-          in_process_o <= waitrequest_i;
-        else
-          in_process_o <= !( last_word_flag && !waitrequest_i );
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
     write_o <= 1'b0;
   else
     if( start_stb && ( !storage_struct.trans_type ) )
@@ -271,26 +273,30 @@ always_ff @( posedge clk_i, posedge rst_i )
         read_o <= 1'b0;
 
 always_ff @( posedge clk_i )
+  if( start_stb || wr_unit_stb )
+    if( data_mode == RND_DATA )
+      writedata_o <= { DATA_B_W{ rnd_data_reg  } };
+    else
+      writedata_o <= { DATA_B_W{ data_ptrn_reg } };
+
+always_ff @( posedge clk_i )
   if( start_stb )
-    last_word_flag <= !( high_burst_en_flg || low_burst_en_flg );
+    if( ADDR_TYPE == "BYTE" )
+      last_word_flag <= !( high_burst_en || low_burst_en );
+    else
+      if( ADDR_TYPE == "WORD" )
+        last_word_flag <= !burst_en_flag;
   else
     if( wr_unit_stb )
       last_word_flag <= ( burst_cnt == 2 );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    rnd_data_reg <= 8'hFF;
+    rnd_data <= 8'hFF;
   else
     if( data_mode == RND_DATA )
       if( start_stb || wr_unit_stb )
-        rnd_data_reg <= { rnd_data_reg[6 : 0], data_gen_bit };
-
-always_ff @( posedge clk_i )
-  if( start_stb || wr_unit_stb )
-    if( data_mode == RND_DATA )
-      writedata_o <= { DATA_B_W{ rnd_data_reg  } };
-    else
-      writedata_o <= { DATA_B_W{ data_ptrn_reg } };
+        rnd_data <= { rnd_data[6 : 0], data_gen_bit };
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -305,19 +311,19 @@ always_ff @( posedge clk_i )
   if( test_mode == WRITE_AND_CHECK )
     if( start_stb && !storage_struct.trans_type )
       begin
-        cmp_pkt_o.start_addr        <= storage_struct.word_addr;
+        cmp_pkt_o.start_addr  <= storage_struct.start_addr;
         cmp_pkt_o.words_count <= burstcount_exp;
         cmp_pkt_o.start_off   <= storage_struct.start_off;
         cmp_pkt_o.end_off     <= storage_struct.end_off;
         cmp_pkt_o.data_mode   <= data_mode;
         if( data_mode == RND_DATA )
-          cmp_pkt_o.data_ptrn <= rnd_data_reg;
+          cmp_pkt_o.data_ptrn <= rnd_data;
         else
-          cmp_pkt_o.data_ptrn <= data_ptrn_reg;
+          cmp_pkt_o.data_ptrn <= data_ptrn;
       end
 
-assign data_gen_bit = ( rnd_data_reg[6] ^ rnd_data_reg[1] ^ rnd_data_reg[0] );
+assign data_gen_bit = ( rnd_data[6] ^ rnd_data[1] ^ rnd_data[0] );
 assign wr_unit_stb  = ( write_o && ( !waitrequest_i ) );
-assign start_stb    = ( !in_process_o && pkt_storage_valid );
+assign start_stb    = ( !in_process_o && storage_valid );
 
 endmodule : transmitter_block
