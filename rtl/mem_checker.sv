@@ -30,14 +30,13 @@ module mem_checker(
 
 logic [15 : 0][31 : 0]  csr_registers;
 
-logic wr_result;
+logic test_finish;
 logic test_result;
 
-logic err_check;
-logic cmp_block_busy;
-logic trans_block_busy;
-logic meas_block_busy;
-logic cmd_accepted;
+logic cmp_error;
+logic cmp_busy;
+logic trans_busy;
+logic meas_busy;
 
 logic start_test;
 
@@ -52,7 +51,7 @@ csr_block csr_block_inst(
   .writedata_i      ( sys_writedata_i  ),
   .readdata_o       ( sys_readdata_o   ),
 
-  .wr_result_i      ( wr_result        ),
+  .wr_result_i      ( test_finish      ),
   .test_result_i    ( test_result      ),
 
   .err_addr_i       ( csr_registers[6]            ),
@@ -71,60 +70,59 @@ csr_block csr_block_inst(
 );
 
 control_block control_block_inst(
-  .rst_i              ( rst_i                 ),
-  .clk_i              ( clk_mem_i             ),
-
-  .start_test_i       ( start_test            ),
-
-  .err_check_i        ( err_check             ),
-
-  .cmp_block_busy_i   ( cmp_block_busy        ),
-  .meas_block_busy_i  ( meas_block_busy       ),
-  .trans_block_busy_i ( trans_block_busy      ),
-
-  .test_param_reg_i   ( csr_registers[3 : 1]  ),
-
-  .in_process_i       ( in_process            ),
-
-  .wr_result_o        ( wr_result             ),
-  .test_result_o      ( test_result           ),
-
-  .trans_valid_o      ( trans_valid           ),
-  .trans_addr_o       ( trans_addr            ),
-  .trans_type_o       ( trans_type            )
+  .rst_i            ( rst_i                 ),
+  .clk_i            ( clk_mem_i             ),
+                                              
+  .start_test_i     ( start_test            ),
+  .test_param_i     ( csr_registers[3 : 1]  ),
+                                              
+  .test_finish_o    ( test_finish           ),
+  .test_result_o    ( test_result           ),
+                                              
+  .cmp_error_i      ( cmp_error             ),
+  .cmp_busy_i       ( cmp_busy              ),
+                                              
+  .meas_busy_i      ( meas_busy             ),
+                                              
+  .trans_process_i  ( trans_process         ),
+  .trans_busy_i     ( trans_busy            ),
+                                              
+  .trans_valid_o    ( trans_valid           ),
+  .trans_addr_o     ( trans_addr            ),
+  .trans_type_o     ( trans_type            )
 );
 
 cmp_struct_t      cmp_struct;
-logic             cmp_struct_en;
+logic             cmp_en;
 
 logic                   trans_valid;
 logic [ADDR_W - 1 : 0]  trans_addr;
 logic                   trans_type;
 
-logic                   in_process;
+logic                   trans_process;
 
 transmitter_block transmitter_block_inst( 
   .rst_i              ( rst_i                 ),
   .clk_i              ( clk_mem_i             ),
-
+                                                 
+  .test_param_i       ( csr_registers[3 : 1]  ),
+                                                 
   .trans_valid_i      ( trans_valid           ),
   .trans_addr_i       ( trans_addr            ),
   .trans_type_i       ( trans_type            ),
-
-  .test_param_reg_i   ( csr_registers[3 : 1]  ),
-
-  .in_process_o       ( in_process            ),
-  .trans_block_busy_o ( trans_block_busy      ),
-
-  .error_check_i      ( err_check             ),
-
-  .cmp_struct_en_o    ( cmp_struct_en         ),
+                                                 
+  .trans_process_o    ( trans_process         ),
+  .trans_busy_o       ( trans_busy            ),
+                                                 
+  .cmp_error_i        ( cmp_error             ),
+                                                 
+  .cmp_en_o           ( cmp_en                ),
   .cmp_struct_o       ( cmp_struct            ),
 
   .readdatavalid_i    ( mem_readdatavalid_i ),
   .readdata_i         ( mem_readdata_i      ),
   .waitrequest_i      ( mem_waitrequest_i   ),
-
+                                              
   .address_o          ( mem_address_o       ),
   .read_o             ( mem_read_o          ),
   .write_o            ( mem_write_o         ),
@@ -134,23 +132,23 @@ transmitter_block transmitter_block_inst(
 );
 
 compare_block compare_block_inst(
-  .rst_i            ( rst_i                     ),
-  .clk_i            ( clk_mem_i                 ),
-
+  .clk_i            ( rst_i                     ),
+  .rst_i            ( clk_mem_i                 ),
+                                                 
   .start_test_i     ( start_test                ),
-
+                                                  
   .readdatavalid_i  ( mem_readdatavalid_i       ),
   .readdata_i       ( mem_readdata_i            ),
-
-  .cmp_struct_en_i  ( cmp_struct_en             ),
+                                                  
+  .cmp_en_i         ( cmp_en                    ),
   .cmp_struct_i     ( cmp_struct                ),
-
-  .err_check_o      ( err_check                 ),
+                                                  
+  .cmp_error_o      ( cmp_error                 ),
   .err_addr_o       ( csr_registers[6]          ),
   .err_data_o       ( csr_registers[7][7 : 0]   ),
   .orig_data_o      ( csr_registers[7][15 : 8]  ),
-
-  .cmp_block_busy_o ( cmp_block_busy            )
+                                                  
+  .cmp_busy_o       ( cmp_busy                  )
 );
 
 measure_block measure_block_inst( 
@@ -167,7 +165,7 @@ measure_block measure_block_inst(
 
   .start_test_i       ( start_test          ),
 
-  .meas_block_busy_o  ( meas_block_busy     ),
+  .meas_block_busy_o  ( meas_busy     ),
 
   .wr_ticks_o         ( csr_registers[8]    ),
   .wr_units_o         ( csr_registers[9]    ),

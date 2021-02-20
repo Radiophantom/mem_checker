@@ -4,20 +4,23 @@ module control_block(
   input                           rst_i,
   input                           clk_i,
 
+  // CSR interface
   input                           start_test_i,
-
-  input                           err_check_i,
-
-  input                           cmp_block_busy_i,
-  input                           meas_block_busy_i,
-  input                           trans_block_busy_i,
-
-  input         [2 : 1][31 : 0]   test_param_reg_i,
+  input         [2 : 1][31 : 0]   test_param_i,
   
-  output logic                    wr_result_o,
+  output logic                    test_finish_o,
   output logic                    test_result_o,
 
-  input                           in_process_i,
+  // Compare interface
+  input                           cmp_error_i,
+  input                           cmp_busy_i,
+
+  // Measure interface
+  input                           meas_busy_i,
+
+  // Transmitter interface
+  input                           trans_process_i,
+  input                           trans_busy_i,
 
   output logic                    trans_valid_o,
   output logic  [ADDR_W - 1 : 0]  trans_addr_o,
@@ -26,30 +29,27 @@ module control_block(
 
 localparam int RND_ADDR_W = $bits( rnd_addr_reg );
 
-// csr register casting
-logic [15 : 0]                      test_count;
-test_mode_t                         test_mode;
-addr_mode_t                         addr_mode;
-logic [AMM_BURST_W - 2 : 0]         burstcount_reg;
-logic [ADDR_W - 1 : 0]              fix_addr_csr_reg;
+logic         [15 : 0]                test_count;
+test_mode_t                           test_mode;
+addr_mode_t                           addr_mode;
+logic         [AMM_BURST_W - 2 : 0]   burstcount;
+logic         [ADDR_W - 1 : 0]        fix_addr_csr;
 
-// variables declaration
-logic [15:0]                        cmd_cnt;
-logic                               last_trans_flag, test_complete_flag;
-logic                               test_complete_state;
-logic                               cnt_en_state, trans_en_state; 
+logic         [15 : 0]                cmd_cnt;
+logic                                 last_trans_flag, test_complete_flag;
+logic                                 test_complete_state;
+logic                                 cnt_en_state, trans_en_state; 
 
-logic [ADDR_W - 1 : 0]              decoded_addr;
-logic [ADDR_W - 1 : 0]              fix_addr_reg;
-logic [ADDR_W - 1 : 0]              run_0_reg;
-logic [ADDR_W - 1 : 0]              run_1_reg;
-logic [ADDR_W - 1 : 0]              inc_addr_reg;
-logic                               rnd_addr_gen_bit;
+logic         [ADDR_W - 1 : 0]        decoded_addr;
+logic         [ADDR_W - 1 : 0]        fix_addr_reg;
+logic         [ADDR_W - 1 : 0]        run_0_reg;
+logic         [ADDR_W - 1 : 0]        run_1_reg;
+logic         [ADDR_W - 1 : 0]        inc_addr_reg;
+logic                                 rnd_addr_gen_bit;
 
-logic                               next_addr_stb;
-logic                               next_addr_allowed;
-logic                               cmd_accepted_stb;
-
+logic                                 next_addr_stb;
+logic                                 next_addr_allowed;
+logic                                 cmd_accepted_stb;
 
 enum logic [2:0] {
   IDLE_S,
@@ -65,7 +65,7 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     state <= IDLE_S;
   else
-    if( err_check_i )
+    if( cmp_error_i )
       state <= ERROR_CHECK_S;
     else
       state <= next_state;
@@ -85,24 +85,24 @@ always_comb
         end
       READ_ONLY_S :
         begin
-          if( last_trans_flag && !in_process_i )
+          if( last_trans_flag && ( !trans_process_i ) )
             next_state = END_TEST_S;
         end
       WRITE_ONLY_S :
         begin
-          if( last_trans_flag && ( !in_process_i ) )
+          if( last_trans_flag && ( !trans_process_i ) )
             next_state = END_TEST_S;
         end
       WRITE_WORD_S :
         begin
-          if( !in_process_i )
+          if( !trans_process_i )
             next_state = READ_WORD_S;
         end
       READ_WORD_S :
         begin
-          if( last_trans_flag && ( !in_process_i ) )
+          if( last_trans_flag && ( !trans_process_i ) )
             next_state = END_TEST_S;
-          else if( !in_process_i )
+          else if( !trans_process_i )
             next_state = WRITE_WORD_S;
         end
       END_TEST_S :
@@ -144,14 +144,14 @@ endgenerate
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    rnd_addr_reg <= { RND_ADDR_W{ 1'b1 } };
+    rnd_addr_reg <= '1; //{ RND_ADDR_W{ 1'b1 } };
   else
     if( next_addr_stb && ( addr_mode == RND_ADDR ) )
       rnd_addr_reg <= { rnd_addr_reg[RND_ADDR_W - 2 : 0], rnd_addr_gen_bit };
 
 always_ff @( posedge clk_i )
   if( start_test_i && ( addr_mode == FIX_ADDR ) )
-    fix_addr_reg <= fix_addr_csr_reg;
+    fix_addr_reg <= fix_addr_csr;
 
 always_ff @( posedge clk_i )
   if( addr_mode == RUN_0_ADDR )
@@ -172,7 +172,7 @@ always_ff @( posedge clk_i )
 always_ff @( posedge clk_i )
   if( addr_mode == INC_ADDR )
     if( start_test_i )
-      inc_addr_reg <= fix_addr_csr_reg;
+      inc_addr_reg <= fix_addr_csr;
     else
       if( next_addr_stb )
         inc_addr_reg <= inc_addr_reg + 1'b1;
@@ -205,14 +205,14 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     trans_valid_o <= 1'b0;
   else
-    if( err_check_i )
+    if( cmp_error_i )
       trans_valid_o <= 1'b0;
     else
       if( trans_en_state )
         if( ( !trans_valid_o ) || ( !last_trans_flag ) )
           trans_valid_o <= 1'b1;
         else
-          if( !in_process_i )
+          if( !trans_process_i )
             trans_valid_o <= 1'b0;
 
 always_ff @( posedge clk_i )
@@ -232,9 +232,9 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    wr_result_o <= 1'b0;
+    test_finish_o <= 1'b0;
   else
-    wr_result_o <= ( test_complete_state && test_complete_flag );
+    test_finish_o <= ( test_complete_state && test_complete_flag );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -243,7 +243,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( start_test_i )
       test_result_o <= 1'b0;
     else
-      if( err_check_i )
+      if( cmp_error_i )
         test_result_o <= 1'b1;
 
 assign trans_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S  ) ||
@@ -252,19 +252,18 @@ assign trans_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_
 assign cnt_en_state         = ( state == READ_ONLY_S  ) || ( state == WRITE_ONLY_S ) ||
                               ( state == READ_WORD_S  );
 
-assign next_addr_stb        = ( cnt_en_state && ( !trans_valid_o || cmd_accepted_stb ) );
+assign next_addr_stb        = ( cnt_en_state && ( ( !trans_valid_o ) || cmd_accepted_stb ) );
 
 assign test_complete_state  = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
-assign cmd_accepted_stb     = ( trans_valid_o && ( !in_process_i ) );
+assign cmd_accepted_stb     = ( trans_valid_o && ( !trans_process_i ) );
 
-assign test_complete_flag   = ( !cmp_block_busy_i && !meas_block_busy_i && !trans_block_busy_i );
+assign test_complete_flag   = ( !cmp_busy_i && !meas_busy_i && !trans_busy_i );
 
-assign test_count       = test_param_reg_i[1][31 : 16             ];
-assign burstcount_reg   = test_param_reg_i[1][AMM_BURST_W - 2 : 0 ];
-assign fix_addr_csr_reg = test_param_reg_i[2][ADDR_W - 1 : 0      ];
+assign test_count   = test_param_i[1][31 : 16             ];
+assign fix_addr_csr = test_param_i[2][ADDR_W - 1 : 0      ];
 
-assign test_mode        = test_mode_t'( test_param_reg_i[1][15 : 14] );
-assign addr_mode        = addr_mode_t'( test_param_reg_i[1][13 : 11] );
+assign test_mode    = test_mode_t'( test_param_i[1][15 : 14] );
+assign addr_mode    = addr_mode_t'( test_param_i[1][13 : 11] );
 
 endmodule : control_block
