@@ -8,7 +8,7 @@ module control_block(
   input                           start_test_i,
   input         [2 : 1][31 : 0]   test_param_i,
   
-  output logic                    test_finish_o,
+  output logic                    test_finished_o,
   output logic                    test_result_o,
 
   // Compare interface
@@ -23,33 +23,42 @@ module control_block(
   input                           trans_busy_i,
 
   output logic                    trans_valid_o,
-  output logic  [ADDR_W - 1 : 0]  trans_addr_o,
-  output logic                    trans_type_o
+  output logic                    trans_type_o,
+  output logic  [ADDR_W - 1 : 0]  trans_addr_o
 );
 
-localparam int RND_ADDR_W = $bits( rnd_addr_reg );
+logic                       next_addr_stb;
+logic   [ADDR_W - 1 : 0]    next_addr;
 
-logic         [15 : 0]                test_count;
-test_mode_t                           test_mode;
-addr_mode_t                           addr_mode;
-logic         [AMM_BURST_W - 2 : 0]   burstcount;
-logic         [ADDR_W - 1 : 0]        fix_addr_csr;
+address_block address_block_inst(
+  .rst_i          ( rst_i         ),
+  .clk_i          ( clk_i         ),
 
-logic         [15 : 0]                cmd_cnt;
-logic                                 last_trans_flag, test_complete_flag;
-logic                                 test_complete_state;
-logic                                 cnt_en_state, trans_en_state; 
+  .start_test_i   ( start_test_i  ),
+  .test_param_i   ( test_param_i  ),
 
-logic         [ADDR_W - 1 : 0]        decoded_addr;
-logic         [ADDR_W - 1 : 0]        fix_addr_reg;
-logic         [ADDR_W - 1 : 0]        run_0_reg;
-logic         [ADDR_W - 1 : 0]        run_1_reg;
-logic         [ADDR_W - 1 : 0]        inc_addr_reg;
-logic                                 rnd_addr_gen_bit;
+  .next_addr_en_i ( next_addr_stb ),
 
-logic                                 next_addr_stb;
-logic                                 next_addr_allowed;
-logic                                 cmd_accepted_stb;
+  .next_addr_o    ( next_addr     )
+);
+
+logic         [15 : 0]    test_count;
+logic         [15 : 0]    cmd_cnt;
+
+test_mode_t               test_mode;
+
+logic                     last_trans_flag;
+logi                      finished_flag;
+
+logic                     last_trans_stb;
+logic                     cmd_accepted_stb;
+logic                     preset_stb;
+
+logic                     finished_state;
+logic                     cnt_en_state;
+logic                     trans_en_state; 
+
+logic                     cmd_accept_ready;
 
 enum logic [2:0] {
   IDLE_S,
@@ -83,38 +92,46 @@ always_comb
               WRITE_AND_CHECK : next_state = WRITE_WORD_S;
             endcase
         end
+
       READ_ONLY_S :
         begin
-          if( last_trans_flag && ( !trans_process_i ) )
+          if( last_trans_stb )
             next_state = END_TEST_S;
         end
+
       WRITE_ONLY_S :
         begin
-          if( last_trans_flag && ( !trans_process_i ) )
+          if( last_trans_stb )
             next_state = END_TEST_S;
         end
+
       WRITE_WORD_S :
         begin
-          if( !trans_process_i )
+          if( cmd_accepted_stb )
             next_state = READ_WORD_S;
         end
+
       READ_WORD_S :
         begin
-          if( last_trans_flag && ( !trans_process_i ) )
-            next_state = END_TEST_S;
-          else if( !trans_process_i )
-            next_state = WRITE_WORD_S;
+          if( cmd_accepted_stb )
+            if( last_trans_flag )
+              next_state = END_TEST_S;
+            else
+              next_state = WRITE_WORD_S;
         end
+
       END_TEST_S :
         begin
-          if( test_complete_flag )
+          if( finish_flag )
             next_state = IDLE_S;
         end
+
       ERROR_CHECK_S :
         begin
-          if( test_complete_flag )
+          if( finish_flag )
             next_state = IDLE_S;
         end
+
       default :
         begin
           next_state = IDLE_S;
@@ -122,70 +139,11 @@ always_comb
     endcase
   end
 
-generate
-  if( ADDR_W <= 8 )
-    begin
-      logic [7:0] rnd_addr_reg;
-      assign rnd_addr_gen_bit = rnd_addr_reg[7] ^ rnd_addr_reg[5] ^ rnd_addr_reg[4] ^ rnd_addr_reg[3];
-    end
-  else
-    if( ADDR_W <= 16 )
-      begin
-        logic [15:0] rnd_addr_reg;
-        assign rnd_addr_gen_bit = rnd_addr_reg[16] ^ rnd_addr_reg[7] ^ rnd_addr_reg[1];
-      end
-    else
-      if( ADDR_W <= 32 )
-        begin
-          logic [31:0] rnd_addr_reg;
-          assign rnd_addr_gen_bit = rnd_addr_reg[31] ^ rnd_addr_reg[21] ^ rnd_addr_reg[1] ^ rnd_addr_reg[0];
-        end
-endgenerate
-
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    rnd_addr_reg <= '1; //{ RND_ADDR_W{ 1'b1 } };
+    preset_stb <= 1'b0;
   else
-    if( next_addr_stb && ( addr_mode == RND_ADDR ) )
-      rnd_addr_reg <= { rnd_addr_reg[RND_ADDR_W - 2 : 0], rnd_addr_gen_bit };
-
-always_ff @( posedge clk_i )
-  if( start_test_i && ( addr_mode == FIX_ADDR ) )
-    fix_addr_reg <= fix_addr_csr;
-
-always_ff @( posedge clk_i )
-  if( addr_mode == RUN_0_ADDR )
-    if( start_test_i )
-      run_0_reg <= { { (ADDR_W - 1){ 1'b1 }}, 1'b0 };
-    else
-      if( next_addr_stb )
-        run_0_reg <= { run_0_reg[ADDR_W - 2 : 0], run_0_reg[ADDR_W - 1] };
-
-always_ff @( posedge clk_i )
-  if( addr_mode == RUN_1_ADDR )
-    if( start_test_i )
-      run_1_reg <= { { (ADDR_W - 1){ 1'b0 }}, 1'b1 };
-    else
-      if( next_addr_stb )
-        run_1_reg <= { run_1_reg[ADDR_W - 2 : 0], run_1_reg[ADDR_W - 1] };
-
-always_ff @( posedge clk_i )
-  if( addr_mode == INC_ADDR )
-    if( start_test_i )
-      inc_addr_reg <= fix_addr_csr;
-    else
-      if( next_addr_stb )
-        inc_addr_reg <= inc_addr_reg + 1'b1;
-
-always_comb
-  case( addr_mode )
-    FIX_ADDR    : decoded_addr = fix_addr_reg;
-    RND_ADDR    : decoded_addr = rnd_addr_reg[ADDR_W - 1 : 0];
-    RUN_0_ADDR  : decoded_addr = run_0_reg;
-    RUN_1_ADDR  : decoded_addr = run_1_reg;
-    INC_ADDR    : decoded_addr = inc_addr_reg;
-    default     : decoded_addr = ADDR_W'( 0 );
-  endcase
+    preset_stb <= start_test_i;
 
 always_ff @( posedge clk_i )
   if( start_test_i )
@@ -196,10 +154,10 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( start_test_i )
-    last_trans_flag <= ( test_count == 1 );
+    last_trans_flag <= ( test_count == 0 );
   else
     if( cmd_accepted_stb && cnt_en_state )
-      last_trans_flag <= ( cmd_cnt == 2 );
+      last_trans_flag <= ( cmd_cnt == 1 );
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -209,61 +167,53 @@ always_ff @( posedge clk_i, posedge rst_i )
       trans_valid_o <= 1'b0;
     else
       if( trans_en_state )
-        if( ( !trans_valid_o ) || ( !last_trans_flag ) )
-          trans_valid_o <= 1'b1;
-        else
-          if( !trans_process_i )
-            trans_valid_o <= 1'b0;
+        trans_valid_o <= ( !last_trans_stb );
 
 always_ff @( posedge clk_i )
   if( trans_en_state )
     case( state )
       WRITE_ONLY_S : trans_type_o <= 1'b0;
       READ_ONLY_S  : trans_type_o <= 1'b1;
-      WRITE_WORD_S : trans_type_o <= cmd_accepted_stb;
+      WRITE_WORD_S : trans_type_o <= ( cmd_accepted_stb  );
       READ_WORD_S  : trans_type_o <= ( !cmd_accepted_stb );
       default      : trans_type_o <= 1'b0;
     endcase
 
 always_ff @( posedge clk_i )
-  if( trans_en_state )
-    if( !trans_valid_o || cmd_accepted_stb )
-      trans_addr_o <= decoded_addr;
+  if( next_addr_stb )
+    trans_addr_o <= next_addr;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    test_finish_o <= 1'b0;
+    test_finished_o <= 1'b0;
   else
-    test_finish_o <= ( test_complete_state && test_complete_flag );
+    test_finished_o <= ( finished_state && finish_flag );
 
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
+always_ff @( posedge clk_i )
+  if( start_test_i )
     test_result_o <= 1'b0;
   else
-    if( start_test_i )
-      test_result_o <= 1'b0;
-    else
-      if( cmp_error_i )
-        test_result_o <= 1'b1;
+    if( cmp_error_i )
+      test_result_o <= 1'b1;
 
-assign trans_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S  ) ||
-                              ( state == WRITE_WORD_S ) || ( state == READ_WORD_S  );
+assign trans_en_state     = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S ) ||
+                            ( state == WRITE_WORD_S ) || ( state == READ_WORD_S );
 
-assign cnt_en_state         = ( state == READ_ONLY_S  ) || ( state == WRITE_ONLY_S ) ||
-                              ( state == READ_WORD_S  );
+assign cnt_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S ) ||
+                            ( state == READ_WORD_S  ); 
 
-assign next_addr_stb        = ( cnt_en_state && ( ( !trans_valid_o ) || cmd_accepted_stb ) );
+assign finished_state     = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
-assign test_complete_state  = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
+assign next_addr_stb      = ( preset_stb || ( cnt_en_state && cmd_accepted_stb ) );
 
-assign cmd_accepted_stb     = ( trans_valid_o && ( !trans_process_i ) );
+assign finish_flag        = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
 
-assign test_complete_flag   = ( !cmp_busy_i && !meas_busy_i && !trans_busy_i );
+assign test_count         = test_param_i[1][31 : 16];
 
-assign test_count   = test_param_i[1][31 : 16             ];
-assign fix_addr_csr = test_param_i[2][ADDR_W - 1 : 0      ];
+assign test_mode          = test_mode_t'( test_param_i[1][15 : 14] );
 
-assign test_mode    = test_mode_t'( test_param_i[1][15 : 14] );
-assign addr_mode    = addr_mode_t'( test_param_i[1][13 : 11] );
+assign cmd_accept_ready   = ( !trans_process_i );
+assign cmd_accepted_stb   = ( trans_valid_o   && cmd_accept_ready );
+assign last_trans_stb     = ( last_trans_flag && cmd_accepted_stb );
 
 endmodule : control_block
