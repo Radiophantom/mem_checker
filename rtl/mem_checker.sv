@@ -76,7 +76,7 @@ control_block control_block_inst(
   .start_test_i     ( start_test            ),
   .test_param_i     ( csr_registers[3 : 1]  ),
                                               
-  .test_finish_o    ( test_finish           ),
+  .test_finished_o  ( test_finish           ),
   .test_result_o    ( test_result           ),
                                               
   .cmp_error_i      ( cmp_error             ),

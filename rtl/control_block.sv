@@ -48,7 +48,7 @@ logic         [15 : 0]    cmd_cnt;
 test_mode_t               test_mode;
 
 logic                     last_trans_flag;
-logi                      finished_flag;
+logic                     finished_flag;
 
 logic                     last_trans_stb;
 logic                     cmd_accepted_stb;
@@ -122,13 +122,13 @@ always_comb
 
       END_TEST_S :
         begin
-          if( finish_flag )
+          if( finished_flag )
             next_state = IDLE_S;
         end
 
       ERROR_CHECK_S :
         begin
-          if( finish_flag )
+          if( finished_flag )
             next_state = IDLE_S;
         end
 
@@ -187,7 +187,7 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     test_finished_o <= 1'b0;
   else
-    test_finished_o <= ( finished_state && finish_flag );
+    test_finished_o <= ( finished_state && finished_flag );
 
 always_ff @( posedge clk_i )
   if( start_test_i )
@@ -206,7 +206,7 @@ assign finished_state     = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_
 
 assign next_addr_stb      = ( preset_stb || ( cnt_en_state && cmd_accepted_stb ) );
 
-assign finish_flag        = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
+assign finished_flag      = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
 
 assign test_count         = test_param_i[1][31 : 16];
 

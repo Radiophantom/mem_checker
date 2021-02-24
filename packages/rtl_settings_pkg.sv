@@ -1,9 +1,9 @@
 package rtl_settings_pkg;
 
-parameter int     MEM_ADDR_W  = 29;
-parameter int     MEM_DATA_W  = 64;
+parameter int     MEM_ADDR_W  = 32;
+parameter int     MEM_DATA_W  = 8;
 parameter int     AMM_ADDR_W  = 32;
-parameter int     AMM_DATA_W  = 128;
+parameter int     AMM_DATA_W  = 512;
 parameter int     AMM_BURST_W = 11;
 
 parameter int     DATA_B_W    = ( AMM_DATA_W / 8 );
