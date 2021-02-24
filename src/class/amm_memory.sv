@@ -1,25 +1,26 @@
-'include "./bathtube_distribution.sv"
+`include "./bathtube_distribution.sv"
 
-import settings_pkg::*;
+import rtl_settings_pkg::*;
+import tb_settings_pkg::*;
 
-class amm_slave_memory;
+class amm_slave_memory();
 
 bit [7 : 0] memory_array [*];
 bit [7 : 0] rd_data [$];
 
 bathtube_distribution   bath_dist_obj;
-err_struct_t            err_struct;
+random_scenario         rnd_scen_obj;
 
-err_
+test_result_t     test_result;
 
-int cur_transaction_num = 0;
-int err_transaction_num = 0;
+int cur_trans_num = 0;
+int err_trans_num = 0;
 
-int insert_err_enable   = 0;
+int insert_error   = 0;
 
 local function automatic void wr_mem(
-  input int unsigned          wr_addr,
-  ref   bit           [7 : 0] wr_data [$]
+      int unsigned          wr_addr,
+  ref bit           [7 : 0] wr_data [$]
 );
   while( wr_data.size() )
     begin
@@ -29,53 +30,54 @@ local function automatic void wr_mem(
 endfunction : wr_mem
 
 local task automatic rd_mem(
-  input int unsigned          rd_addr,
-  input int                   bytes_amount,
-  ref   bit           [7 : 0] rd_data [$]
+      int unsigned          rd_addr,
+      int                   bytes_amount,
+  ref bit           [7 : 0] rd_data [$]
 );
   repeat( $urandom_range( MIN_DELAY_PARAM, MAX_DELAY_PARAM ) )
     @( posedge amm_if_v.clk );
   repeat( bytes_amount )
     begin
-      if( memory_array.exists( rd_addr ) )
-        rd_data.push_back( memory_array[rd_addr] );
-      else
-        rd_data.push_back( 8'd0 );
+      rd_data.push_back( memory_array[rd_addr] ); // if address doesn't exist return 0 by default
       rd_addr++;
     end
 endtask : rd_mem
 
 virtual amm_if #(
-  .ADDR_W   ( ADDR_W  ),
-  .DATA_W   ( DATA_W  ),
-  .BURST_W  ( BURST_W )
+  .ADDR_W   ( AMM_ADDR_W  ),
+  .DATA_W   ( AMM_DATA_W  ),
+  .BURST_W  ( AMM_BURST_W )
 ) amm_if_v;
 
 function new(
   virtual amm_if #(
-    .ADDR_W   ( ADDR_W  ),
-    .DATA_W   ( DATA_W  ),
-    .BURST_W  ( BURST_W )
+    .ADDR_W   ( AMM_ADDR_W  ),
+    .DATA_W   ( AMM_DATA_W  ),
+    .BURST_W  ( AMM_BURST_W )
   ) amm_if_v,
-  mailbox agent2mem_mbx,
-  mailbox mem2scoreb_mbx
+  mailbox gen2mem_mbx,
+  mailbox mem2scoreb_mbx,
+  event   test_started,
+  event   test_finished
 );
   this.amm_if_v       = amm_if_v;
-  this.agent2mem_mbx  = agent2mem_mbx;
+  this.gen2mem_mbx    = gen2mem_mbx;
   this.mem2scoreb_mbx = mem2scoreb_mbx;
+  this.test_started   = test_started;
+  this.test_finished  = test_finished;
   init_interface();
 endfunction
 
 local function automatic void init_interface();
   amm_if_v.read           = 1'b0;
   amm_if_v.write          = 1'b0;
+  amm_if_v.readdatavalid  = 1'b0;
+  amm_if_v.waitrequest    = 1'b0;
+  amm_if_v.readdata       = '0;
   amm_if_v.address        = '0;
   amm_if_v.writedata      = '0;
   amm_if_v.byteenable     = '0;
   amm_if_v.burstcount     = '0;
-  amm_if_v.readdatavalid  = 1'b0;
-  amm_if_v.readdata       = '0;
-  amm_if_v.waitrequest    = 1'b0;
 endfunction : init_interface
 
 local function automatic int start_offset(
@@ -86,14 +88,17 @@ local function automatic int start_offset(
       return i;
 endfunction : start_offset
 
-local function automatic void scan_err_trans_mbx();
+local function automatic void scan_err_trans_mbx(); // may be should be task - not function to synthesis
   fork
     forever
       begin
-        agent2mem_mbx.get( err_struct );
-        insert_err_enable   = err_struct.error;
-        cur_transaction_num = 0;
-        err_transaction_num = err_struct.error_num;
+        wait( test_started.triggered );
+        gen2mem_mbx.get( rnd_scen_obj );
+        insert_error   = rnd_scen_obj.err_enable;
+        err_trans_num = rnd_scen_obj.err_trans_num;
+        cur_trans_num = 0;
+        wait( test_finished.triggered );
+        mem2scoreb_mbx.put( test_result );
       end
 endfunction : scan_err_trans_mbx
 
@@ -101,11 +106,11 @@ local function automatic void corrupt_data(
   ref bit [7 : 0] wr_data [$]
 );
   bath_dist_obj.set_dist_parameters( wr_data.size() );
-  err_struct.addr           = bath_dist_obj.get_value(); 
-  err_struct.data           = wr_data[err_struct.addr];
-  wr_data[err_struct.addr]  = ( !wr_data[err_struct.addr] );
-  err_struct.addr--; 
-endfunction
+  test_result[CSR_ERR_ADDR] = bath_dist_obj.value;
+  test_result[CSR_ERR_DATA] = wr_data[bath_dist_obj.value];
+  wr_data[bath_dist_obj.value]  = ( !wr_data[bath_dist_obj.value] );
+  test_result[CSR_ERR_DATA] = wr_data[bath_dist_obj.value];
+endfunction : corrupt_data
 
 local task automatic send_data(
   ref bit [7 : 0] rd_data [$]

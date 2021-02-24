@@ -51,6 +51,34 @@ logic [CNT_W - 1 : 0] save_cnt_num;
 logic [15 : 0]        min_delay;
 logic [15 : 0]        max_delay;
 
+/*
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    wr_units_o <= 32'( 0 );
+  else
+    if( wr_start_stb )
+      wr_units_o <=  wr_units_o + burstcount_i;
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    wr_start_flag <= 1'b0;
+  else
+    if( in_process )
+      wr_start_flag <= ( last_word && ( !waitrequest_i ) );
+    else
+      wr_start_flag <= 1'b1;
+
+always_ff @( posedge clk_i )
+  if( wr_start_flag && write_i && !waitrequest_i )
+    wr_cnt <= burstcount_i;
+  else
+    if( !wr_start_flag && write_i && !waitrequest_i )
+      wr_cnt <= wr_cnt - 1'b1;
+
+always_ff @( posedge clk_i )
+  if( !wr_start_flag && write_i && !waitrequest_i )
+    last_word <= ( wr_cnt == 2 );
+*/
 
 logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
 logic [CNT_NUM - 1 : 0]                       last_rd_word_reg;
@@ -166,7 +194,7 @@ always_ff @( posedge clk_i )
 always_ff @( posedge clk_i )
   save_delay_stb <= last_rd_word_stb;
 
-always_ff @( posedge clk_i )
+/*always_ff @( posedge clk_i )
   if( start_test_i )
     min_delay <= 16'hFF_FF;
   else
@@ -179,7 +207,7 @@ always_ff @( posedge clk_i )
   else
     if( save_delay_stb && ( delay_cnt_array[save_cnt_num] > max_delay ) )
       max_delay <= delay_cnt_array[save_cnt_num];
-
+*/
 always_ff @( posedge clk_i )
   if( start_test_i )
     sum_delay_o <= 32'( 0 );
@@ -197,7 +225,7 @@ generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
 
-      logic [ADDR_B_W : 0] bytes_amount;
+/*      logic [ADDR_B_W : 0] bytes_amount;
       logic                wr_dly_stb;
 
       always_ff @( posedge clk_i )
@@ -213,7 +241,7 @@ generate
         else
           if( wr_dly_stb )
             wr_units_o <= wr_units_o + bytes_amount;
-
+*/
     end
   else
     if( ADDR_TYPE == "WORD" )

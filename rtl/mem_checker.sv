@@ -51,22 +51,11 @@ csr_block csr_block_inst(
   .writedata_i      ( sys_writedata_i  ),
   .readdata_o       ( sys_readdata_o   ),
 
-  .wr_result_i      ( test_finish      ),
-  .test_result_i    ( test_result      ),
+  .test_finished_i  ( test_finish           ),
+  .test_result_i    ( csr_registers[14 : 5] ),
 
-  .err_addr_i       ( csr_registers[6]            ),
-  .err_data_i       ( csr_registers[7][7 : 0]     ),
-  .orig_data_i      ( csr_registers[7][15 : 8]    ),
-  .wr_ticks_i       ( csr_registers[8]            ),
-  .wr_units_i       ( csr_registers[9]            ),
-  .rd_ticks_i       ( csr_registers[10]           ),
-  .rd_words_i       ( csr_registers[11]           ),
-  .min_max_delay_i  ( csr_registers[12]           ),
-  .sum_delay_i      ( csr_registers[13]           ),
-  .rd_req_cnt_i     ( csr_registers[14]           ),
-
-  .start_test_o     ( start_test                  ),
-  .test_param_reg_o ( csr_registers[3 : 1]        ) 
+  .start_test_o     ( start_test            ),
+  .test_param_o     ( csr_registers[3 : 1]  ) 
 );
 
 control_block control_block_inst(

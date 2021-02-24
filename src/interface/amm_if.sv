@@ -20,10 +20,10 @@ modport master(
   output address,
   output read,
   output write,
+  output writedata,
   output byteenable,
   output burstcount,
   input  readdatavalid,
-  output writedata,
   input  readdata,
   input  waitrequest
 );
@@ -40,12 +40,12 @@ modport slave(
   input  address,
   input  read,
   input  write,
+  input  writedata,
   input  byteenable,
   input  burstcount,
   output readdatavalid,
-  input  writedata,
   output readdata,
   output waitrequest
 );
 
-endinterface
+endinterface : amm_if

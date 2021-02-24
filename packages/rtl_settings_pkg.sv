@@ -14,6 +14,22 @@ parameter string  ADDR_TYPE   = "BYTE"; // "BYTE" or "WORD"
 parameter int     ADDR_W      = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
                                                           ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W ) );
 
+parameter int CSR_TEST_START  = 0;
+parameter int CSR_TEST_PARAM  = 1;
+parameter int CSR_SET_ADDR    = 2;
+parameter int CSR_SET_DATA    = 3;
+parameter int CSR_TEST_FINISH = 4;
+parameter int CSR_TEST_RESULT = 5;
+parameter int CSR_ERR_ADDR    = 6;
+parameter int CSR_ERR_DATA    = 7;
+parameter int CSR_WR_TICKS    = 8;
+parameter int CSR_WR_UNITS    = 9;
+parameter int CSR_RD_TICKS    = 10;
+parameter int CSR_RD_WORDS    = 11;
+parameter int CSR_MIN_MAX_DEL = 12;
+parameter int CSR_SUM_DEL     = 13;
+parameter int CSR_RD_REQ      = 14;
+
 typedef enum logic [1:0] {
   READ_ONLY       = 2'b01,
   WRITE_ONLY      = 2'b10,

@@ -42,6 +42,7 @@ logic                       data_gen_bit;
 logic [7 : 0]               data_ptrn;
 logic [7 : 0]               rnd_data = 8'hFF;
 
+logic                       rnd_data_en;
 logic                       burst_en;
 
 logic [AMM_BURST_W - 2 : 0] burstcount_exp;
@@ -124,14 +125,14 @@ generate
           burst_en <= ( ( burstcount + trans_addr_i[ADDR_B_W - 1 : 0] ) >= DATA_B_W );
 
       always_ff @( posedge clk_i )
-        if( start_stb )
-          if( storage_struct.trans_type )
-            byteenable_o <= '1;
-          else
-            byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !burst_en ),  storage_struct.end_off  );
-        else
+        if( start_stb || wr_unit_stb )
           if( wr_unit_stb )
             byteenable_o <= byteenable_ptrn( 1'b0, cur_struct.start_off,      last_unit_flag, cur_struct.end_off      );
+          else
+            if( storage_struct.trans_type )
+              byteenable_o <= '1;
+            else
+              byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !burst_en ),  storage_struct.end_off  );
 
       always_ff @( posedge clk_i )
         if( start_stb )
@@ -241,11 +242,10 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    rnd_data <= 8'hFF;
+    rnd_data <= '1;
   else
-    if( data_mode == RND_DATA )
-      if( start_stb || wr_unit_stb )
-        rnd_data <= { rnd_data[6 : 0], data_gen_bit };
+    if( rnd_data_en )
+      rnd_data <= { rnd_data[6 : 0], data_gen_bit };
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -255,6 +255,8 @@ always_ff @( posedge clk_i, posedge rst_i )
       cmp_en_o <= ( start_stb && !storage_struct.trans_type );
     else
       cmp_en_o <= 1'b0;
+
+assign rnd_data_en = ( data_mode == RND_DATA ) && ( start_stb || wr_unit_stb );
 
 assign data_ptrn    = test_param_i[3][7 : 0              ];
 assign burstcount   = test_param_i[1][AMM_BURST_W - 2 : 0];

@@ -1,4 +1,5 @@
-import settings_pkg::*;
+import tb_settings_pkg::*;
+import rtl_settings_pkg::*;
 
 class random_scenario();
 
@@ -13,16 +14,24 @@ int run_0_addr_mode;
 int inc_addr_mode;
 
 int err_probability;
-int no_err_probability;
 
-rand bit [15 : 0]           transaction_amount;
-rand bit [1 : 0]            test_mode;
-rand bit [2 : 0]            addr_mode;
-rand bit                    data_mode;
-rand bit [BURST_W - 2 : 0]  burst_count;
+rand  bit   [15 : 0]            trans_amount;
+rand  bit   [1  : 0]            test_mode;
+rand  bit   [2  : 0]            addr_mode;
+rand  bit                       data_mode;
+rand  bit   [9  : 0]            burstcount;
 
-rand bit                    error_enable;
-bit      [15 : 0]           error_transaction_num;
+rand  bit                       err_enable;
+      bit   [15 : 0]            err_trans_num;
+
+rand  bit   [ADDR_W - 1 : 0]    addr_ptrn;
+rand  bit   [7  : 0]            data_ptrn;
+
+test_param_t  test_param;
+
+constraint base_constraints {
+  burst_count <= ( 2**( AMM_BURST_W - 1 ) - 1 );
+}
 
 constraint test_mode_constraint {
   test_mode dist {
@@ -46,18 +55,15 @@ constraint addr_mode_constraint {
 
 constraint error_enable_constraint {
   error_enable dist {
-    0 := no_err_probability,
-    1 := err_probability
+    0 := ( 100 - err_probability ),
+    1 := ( err_probability       )
   };
 }
 
-bit [ADDR_W - 1 : 0]   addr_ptrn; //rand add if no post_randomize() function
-bit [7 : 0]            data_ptrn; //rand add if no post_randomize() function
-
 function automatic void set_test_mode_probability(
-  int read_only_mode  = 10,
-  int write_only_mode = 10,
-  int write_read_mode = 10
+  int read_only_mode  = 30,
+  int write_only_mode = 30,
+  int write_read_mode = 40
 );
   this.read_only_mode   = read_only_mode;
   this.write_only_mode  = write_only_mode;
@@ -65,11 +71,11 @@ function automatic void set_test_mode_probability(
 endfunction
 
 function automatic void set_addr_mode_probability(
-  int fix_addr_mode   = 10,
-  int rnd_addr_mode   = 10,
-  int run_0_addr_mode = 10,
-  int run_1_addr_mode = 10,
-  int inc_addr_mode   = 10
+  int fix_addr_mode   = 20,
+  int rnd_addr_mode   = 20,
+  int run_0_addr_mode = 20,
+  int run_1_addr_mode = 20,
+  int inc_addr_mode   = 20
 );
   this.fix_addr_mode    = fix_addr_mode;
   this.rnd_addr_mode    = rnd_addr_mode;
@@ -79,20 +85,15 @@ function automatic void set_addr_mode_probability(
 endfunction
 
 function automatic void set_err_probability(
-  int err_probability     = 5,
-  int no_err_probability  = 100
+  int err_probability   = 20
 );
-  this.err_probability    = err_probability;
-  this.no_err_probability = no_err_probability;
+  this.err_probability  = err_probability;
 endfunction
 
-// Можно вообще удалить и оставить как есть, но хочу попробовать использовать
-// эту функцию
-function automatic void post_randomize();
-  if( addr_mode == 0 || addr_mode == 4 )
-    randomize( addr_ptrn );
-  if( ~data_mode )
-    randomize( data_ptrn );
-endfunction
+function automatic void prep_test_param();
+  test_param[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
+  test_param[CSR_SET_ADDR]    = addr_ptrn;
+  test_param[CSR_SET_DATA]    = data_ptrn;
+endfunction : prep_test_param
 
-endclass
+endclass : random_scenario

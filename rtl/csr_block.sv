@@ -15,34 +15,21 @@ module csr_block(
   output  logic [31 : 0]          readdata_o,
 
   // Output checker interface
-  input                           wr_result_i, 
-  input                           test_result_i,
-
-  input         [ADDR_W - 1 : 0]  err_addr_i,
-  input         [7 : 0]           err_data_i,
-  input         [7 : 0]           orig_data_i,
-
-  input         [31 : 0]          rd_req_cnt_i,
-  input         [31 : 0]          min_max_delay_i,
-  input         [31 : 0]          sum_delay_i,
-
-  input         [31 : 0]          rd_ticks_i,
-  input         [31 : 0]          rd_words_i,
-
-  input         [31 : 0]          wr_ticks_i,
-  input         [31 : 0]          wr_units_i,
+  input                           test_finished_i, 
+  input         [14 : 5][31 : 0]  test_result_i,
 
   output logic                    start_test_o,
-  output logic  [3 : 1][31 : 0]   test_param_reg_o 
+  output logic  [3  : 1][31 : 0]  test_param_o 
 );
 
-logic [2 : 0]           wr_result_sync_reg;
-logic                   wr_result_stb;
-logic [2 : 0]           rst_start_test_sync_reg;
-logic                   rst_start_bit;
-logic [2 : 0]           start_test_sync_reg;
+logic [2  : 0]          test_finished_sync_reg;
+logic                   test_finished_stb;
+logic [2  : 0]          rst_start_test_sync_reg;
+logic                   rst_start_bit_stb;
+logic [2  : 0]          start_test_sync_reg;
 
 logic [14 : 4][31 : 0]  csr_reg;
+
 logic [3  : 0][31 : 0]  wr_csr_reg;
 logic [14 : 0][31 : 0]  rd_csr_reg;
 
@@ -50,25 +37,25 @@ always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
     csr_reg[4][0] <= 1'b0;
   else
-    if( wr_result_stb )
+    if( test_finished_stb )
       csr_reg[4][0] <= 1'b1;
     else
       if( read_i && ( address_i == 4 ) )
         csr_reg[4][0] <= 1'b0;
 
 always_ff @( posedge clk_sys_i )
-  if( wr_result_stb )
+  if( test_finished_stb )
     begin
-      csr_reg[5]  <= test_result_i;
-      csr_reg[6]  <= err_addr_i;
-      csr_reg[7]  <= { orig_data_i, err_data_i };
-      csr_reg[8]  <= wr_ticks_i;
-      csr_reg[9]  <= wr_units_i;
-      csr_reg[10] <= rd_ticks_i;
-      csr_reg[11] <= rd_words_i;
-      csr_reg[12] <= min_max_delay_i;
-      csr_reg[13] <= sum_delay_i;
-      csr_reg[14] <= rd_req_cnt_i;
+      csr_reg[CSR_TEST_RESULT ] <= test_result_i[CSR_TEST_RESULT ];
+      csr_reg[CSR_ERR_ADDR    ] <= test_result_i[CSR_ERR_ADDR    ];
+      csr_reg[CSR_ERR_DATA    ] <= test_result_i[CSR_ERR_DATA    ];
+      csr_reg[CSR_WR_TICKS    ] <= test_result_i[CSR_WR_TICKS    ];
+      csr_reg[CSR_WR_UNITS    ] <= test_result_i[CSR_WR_UNITS    ];
+      csr_reg[CSR_RD_TICKS    ] <= test_result_i[CSR_RD_TICKS    ];
+      csr_reg[CSR_RD_WORDS    ] <= test_result_i[CSR_RD_WORDS    ];
+      csr_reg[CSR_MIN_MAX_DEL ] <= test_result_i[CSR_MIN_MAX_DEL ];
+      csr_reg[CSR_SUM_DEL     ] <= test_result_i[CSR_SUM_DEL     ];
+      csr_reg[CSR_RD_REQ      ] <= test_result_i[CSR_RD_REQ      ];
     end
     
 always_ff @( posedge clk_sys_i, posedge rst_i )
@@ -77,7 +64,7 @@ always_ff @( posedge clk_sys_i, posedge rst_i )
   else
     if( address_i == 0 )
       begin
-        if( rst_start_bit )
+        if( rst_start_bit_stb )
           wr_csr_reg[0][0] <= 1'b0;
         else
           if( write_i )
@@ -105,16 +92,16 @@ always_ff @( posedge clk_sys_i, posedge rst_i )
 
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
-    wr_result_sync_reg <= 3'd0;
+    test_finished_sync_reg <= 3'd0;
   else
-    wr_result_sync_reg <= { wr_result_sync_reg[1:0], wr_result_i };
+    test_finished_sync_reg <= { test_finished_sync_reg[1:0], test_finished_i };
 
-assign wr_result_stb    = ( wr_result_sync_reg[1]       && !wr_result_sync_reg[2]       );
-assign start_test_o     = ( start_test_sync_reg[1]      && !start_test_sync_reg[2]      );
-assign rst_start_bit    = ( rst_start_test_sync_reg[1]  && !rst_start_test_sync_reg[2]  );
+assign test_finished_stb  = ( test_finished_sync_reg[1]   && !test_finished_sync_reg[2]   );
+assign start_test_o       = ( start_test_sync_reg[1]      && !start_test_sync_reg[2]      );
+assign rst_start_bit_stb  = ( rst_start_test_sync_reg[1]  && !rst_start_test_sync_reg[2]  );
 
 assign rd_csr_reg       = { csr_reg, wr_csr_reg };
 
-assign test_param_reg_o = wr_csr_reg[3:1];
+assign test_param_o = wr_csr_reg[3:1];
 
 endmodule : csr_block

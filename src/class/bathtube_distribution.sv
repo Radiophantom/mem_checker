@@ -21,11 +21,6 @@ function automatic void pre_randomize();
   if( $urandom_range( 1 ) )
     value = right_edge - value;
 
-  value = value + 1;
 endfunction : pre_randomize
-
-function automatic int get_value();
-  return value;
-endfunction : get_value
 
 endclass : bathtube_distribution

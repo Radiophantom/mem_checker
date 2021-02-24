@@ -23,65 +23,68 @@ logic         [ADDR_W - 1     : 0]    run_0;
 logic         [ADDR_W - 1     : 0]    run_1;
 logic         [ADDR_W - 1     : 0]    inc_addr;
 
+logic                                 fix_addr_en;
+logic                                 rnd_addr_en;
+logic                                 run_0_en;
+logic                                 run_1_en;
+logic                                 inc_addr_en;
+
 logic                                 rnd_gen_bit;
 
 generate
   if( ADDR_W <= 8 )
     begin
       logic [7 : 0]  rnd_addr;  
-      assign rnd_gen_bit   = ( rnd_addr[7] ^ rnd_addr[5] ^ rnd_addr[4] ^ rnd_addr[3] );
+      assign rnd_gen_bit = ( rnd_addr[7] ^ rnd_addr[5] ^ rnd_addr[4] ^ rnd_addr[3] );
     end
   else
     if( ADDR_W <= 16 )
       begin
         logic [15 : 0]  rnd_addr;  
-        assign rnd_gen_bit   = ( rnd_addr[15] ^ rnd_addr[7] ^ rnd_addr[1] );
+        assign rnd_gen_bit = ( rnd_addr[15] ^ rnd_addr[7] ^ rnd_addr[1] );
       end
     else
       if( ADDR_W <= 32 )
         begin
           logic [31 : 0]  rnd_addr;  
-          assign rnd_gen_bit   = ( rnd_addr[31] ^ rnd_addr[21] ^ rnd_addr[1] ^ rnd_addr[0] );
+          assign rnd_gen_bit = ( rnd_addr[31] ^ rnd_addr[21] ^ rnd_addr[1] ^ rnd_addr[0] );
         end
 endgenerate
 
-
 always_ff @( posedge clk_i )
-  if( addr_mode == FIX_ADDR )
-    if( start_test_i )
-      fix_addr <= csr_fix_addr;
+  if( fix_addr_en )
+    fix_addr <= csr_fix_addr;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rnd_addr <= '1;
   else
-    if( addr_mode == RND_ADDR )
-      if( next_addr_en_i )
-        rnd_addr <= { rnd_addr[RND_ADDR_W - 2 : 0], rnd_gen_bit };
+    if( rnd_addr_en )
+      rnd_addr <= { rnd_addr[RND_ADDR_W - 2 : 0], rnd_gen_bit };
+
 
 always_ff @( posedge clk_i )
-  if( addr_mode == RUN_0_ADDR )
-    if( start_test_i )
+  if( run_0_en )
+    if( next_addr_en_i )
+      run_0 <= { run_0[ADDR_W - 2 : 0], run_0[ADDR_W - 1] };
+    else
       run_0 <= { {(ADDR_W - 1){ 1'b1 }}, 1'b0 };
-    else
-      if( next_addr_en_i )
-        run_0 <= { run_0[ADDR_W - 2 : 0], run_0[ADDR_W - 1] };
+
 
 always_ff @( posedge clk_i )
-  if( addr_mode == RUN_1_ADDR )
-    if( start_test_i )
+  if( run_1_en )
+    if( next_addr_en_i )
+      run_1 <= { run_1[ADDR_W - 2 : 0], run_1[ADDR_W - 1] };
+    else
       run_1 <= { {(ADDR_W - 1){ 1'b0 }}, 1'b1 };
-    else
-      if( next_addr_en_i )
-        run_1 <= { run_1[ADDR_W - 2 : 0], run_1[ADDR_W - 1] };
+
 
 always_ff @( posedge clk_i )
-  if( addr_mode == INC_ADDR )
-    if( start_test_i )
-      inc_addr <= csr_fix_addr;
+  if( inc_addr_en )
+    if( next_addr_en_i )
+      inc_addr <= inc_addr + 1'b1;
     else
-      if( next_addr_en_i )
-        inc_addr <= inc_addr + 1'b1;
+      inc_addr <= csr_fix_addr;
 
 always_comb
   case( addr_mode )
@@ -93,9 +96,14 @@ always_comb
     default     : next_addr_o = ADDR_W'( 0 );
   endcase
 
-//$cast( addr_mode, test_param_i[1][13 : 11] );
 assign addr_mode    = addr_mode_t'( test_param_i[1][13 : 11] );
 
 assign csr_fix_addr = test_param_i[2][ADDR_W - 1 : 0];
+
+assign fix_addr_en  = ( addr_mode == FIX_ADDR   ) && start_test_i;
+assign rnd_addr_en  = ( addr_mode == RND_ADDR   ) && next_addr_en_i;
+assign run_0_en     = ( addr_mode == RUN_0_ADDR ) && ( start_test_i || next_addr_en_i );
+assign run_1_en     = ( addr_mode == RUN_1_ADDR ) && ( start_test_i || next_addr_en_i );
+assign inc_addr_en  = ( addr_mode == INC_ADDR   ) && ( start_test_i || next_addr_en_i );
 
 endmodule : address_block

@@ -19,8 +19,7 @@ module compare_block(
   // Error interface
   output logic                        cmp_error_o,
   output logic  [31 : 0]              err_addr_o,
-  output logic  [7 : 0]               err_data_o,
-  output logic  [7 : 0]               orig_data_o,
+  output logic  [31 : 0]              err_data_o,
 
   output logic                        cmp_busy_o
 );
@@ -145,11 +144,13 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( check_error )
-    err_data_o <= readdata_delayed[7 + 8 * ( err_byte( check_vector_result ) ) -: 8];
+    err_data <= readdata_delayed[7 + 8 * ( err_byte( check_vector_result ) ) -: 8];
 
 always_ff @( posedge clk_i )
   if( check_error )
-    orig_data_o <= check_data_ptrn;
+    orig_data <= check_data_ptrn;
+
+assign err_data_o = { err_data, orig_data };
 
 always_ff @( posedge clk_i )
   if( readdatavalid_i )
