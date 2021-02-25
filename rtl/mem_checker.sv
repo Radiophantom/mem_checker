@@ -58,6 +58,8 @@ csr_block csr_block_inst(
   .test_param_o     ( csr_registers[3 : 1]  ) 
 );
 
+assign csr_registers[5][0] = test_result;
+
 control_block control_block_inst(
   .rst_i            ( rst_i                 ),
   .clk_i            ( clk_mem_i             ),
@@ -134,8 +136,7 @@ compare_block compare_block_inst(
                                                   
   .cmp_error_o      ( cmp_error                 ),
   .err_addr_o       ( csr_registers[6]          ),
-  .err_data_o       ( csr_registers[7][7 : 0]   ),
-  .orig_data_o      ( csr_registers[7][15 : 8]  ),
+  .err_data_o       ( csr_registers[7]          ),
                                                   
   .cmp_busy_o       ( cmp_busy                  )
 );

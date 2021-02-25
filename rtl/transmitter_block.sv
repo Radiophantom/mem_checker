@@ -100,7 +100,7 @@ generate
       always_ff @( posedge clk_i )
         if( trans_valid_i && ( !trans_process_o ) )
           begin
-            storage_struct.start_addr <= ( trans_addr_i[ADDR_W - 1 : ADDR_B_W] << ADDR_B_W );
+            storage_struct.start_addr <= trans_addr_i[ADDR_W - 1 : ADDR_B_W];
             storage_struct.trans_type <= trans_type_i;
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 : 0];
             storage_struct.end_off    <= ADDR_B_W'( burstcount + trans_addr_i[ADDR_B_W - 1 : 0] );

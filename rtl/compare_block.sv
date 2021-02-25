@@ -1,7 +1,5 @@
 import rtl_settings_pkg::*;
 
-//`include "../rtl/fifo.sv"
-
 module compare_block(
   input                               clk_i,
   input                               rst_i,
@@ -24,203 +22,252 @@ module compare_block(
   output logic                        cmp_busy_o
 );
 
+localparam int CMP_W      = $bits( cmp_struct_t             );
+localparam int ADDR_CNT_W = $bits( cmp_struct_t.start_addr  );
+
 fifo #(
-  .AWIDTH   ( 2               )
-) cmp_storage (
+  .AWIDTH   ( 2               ),
+  .DWIDTH   ( CMP_W           )
+) cmp_fifo_inst (
   .clk_i    ( clk_i           ),
   .srst_i   ( start_test_i    ),
 
   .wrreq_i  ( cmp_en_i        ),
   .data_i   ( cmp_struct_i    ),
 
-  .rdreq_i  ( rd_storage  ),
-  .q_o      ( storage_struct  ),
+  .rdreq_i  ( rd_cmp_fifo     ),
+  .q_o      ( cmp_fifo_q      ),
 
-  .empty_o  ( storage_empty   )
+  .empty_o  ( cmp_fifo_empty  )
 );
 
-logic           storage_empty;
+fifo #(
+  .AWIDTH   ( 3               ),
+  .DWIDTH   ( AMM_DATA_W      )
+) data_fifo_inst (
+  .clk_i    ( clk_i           ),
+  .srst_i   ( start_test_i    ),
 
-cmp_struct_t              storage_struct;
-cmp_struct_t              cur_struct;
+  .wrreq_i  ( readdatavalid_i ),
+  .data_i   ( readdata_i      ),
 
-logic                     storage_valid;
-logic                     stop_checker;
+  .rdreq_i  ( rd_data_fifo    ),
+  .q_o      ( data_fifo_q     ),
 
-logic                       rd_storage;
-logic [DATA_B_W - 1 : 0]    check_vector_result;
-logic                       in_process;
+  .empty_o  ( data_fifo_empty )
+);
 
-logic                     check_error;
-logic                     data_gen_bit;
-logic                     load_stb;
- 
-logic [DATA_B_W - 1 : 0]  check_ptrn;
-logic [ADDR_W - 1 : 0]    cur_check_addr;
-logic [7 : 0]             data_ptrn;
-logic [DATA_B_W - 1 : 0]  check_ptrn_vec;
-logic [7 : 0]             data_gen_reg;
+cmp_struct_t                        storage_struct;
 
-logic                       readdatavalid_delayed;
-logic [AMM_DATA_W - 1 : 0]  readdata_delayed;
+logic   [CMP_W - 1      : 0]        cmp_fifo_q;
+logic   [AMM_DATA_W - 1 : 0]        data_fifo_q;
 
-logic [7 : 0]               check_data_ptrn;
+logic   [ADDR_CNT_W - 1 : 0]        check_addr_cnt;
+logic   [ADDR_CNT_W - 1 : 0]        check_addr;
 
-logic [AMM_BURST_W - 2 : 0] word_cnt;
-logic                       last_word;
+logic   [ADDR_B_W - 1 : 0]          err_byte_num;
+logic   [7 : 0]                     err_byte;
 
-always_comb
-  if( !in_process )
-    rd_storage = 1'b1;
-  else
-    rd_storage = ( readdatavalid_i && last_word );
+logic   [DATA_B_W - 1 : 0]          check_ptrn;
+logic   [DATA_B_W - 1 : 0]          check_vector_result;
+logic   [7 : 0]                     data_ptrn;
+
+logic   [AMM_BURST_W - 2 : 0]       word_cnt;
+logic                               last_word;
+
+logic   [1 : 0]                     pipe_stage_en;
+logic   [1 : 0][7 : 0]              check_data_ptrn;
+logic   [1 : 0][AMM_DATA_W - 1 : 0] check_readdata;
+
+logic                               rd_data_fifo, data_fifo_empty;
+logic                               rd_cmp_fifo,  cmp_fifo_empty;
+
+logic                               check_error;
+logic                               lock_error_stb;
+
+logic                               data_gen_bit;
+
+mask_t                              mask_struct;
+
+state_t                             state, next_state;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    in_process <= 1'b0;
+    state <= IDLE_S;
   else
-    if( !in_process )
-      in_process <= ( !storage_empty );
+    if( check_error )
+      state <= ERROR_S;
     else
-      if( readdatavalid_i && last_word )
-        if( !storage_empty )
-          in_process <= 1'b1;
-        else
-          in_process <= 1'b0;
+      state <= next_state;
+
+always_comb
+  begin
+    next_state = state;
+    case( state )
+      IDLE_S :
+        begin
+          if( !cmp_fifo_empty )
+            next_state = CALC_MASK_S;
+        end
+
+      CALC_MASK_S :
+        begin
+          next_state = LOAD_S;
+        end
+
+      LOAD_S :
+        begin
+          next_state = CHECK_S;
+        end
+
+      CHECK_S :
+        begin
+          if( last_word && rd_data_fifo )
+            next_state = IDLE_S;
+        end
+
+      ERROR_S :
+        begin
+          if( start_test_i )
+            next_state = IDLE_S;
+        end
+
+      default :
+        begin
+          next_state = IDLE_S;
+        end
+    endcase
+  end
 
 always_ff @( posedge clk_i )
-  if( load_stb )
+  if( state == CALC_MASK_S )
+    begin
+      mask_struct.first   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
+      mask_struct.last    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
+      mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
+    end
+
+always_ff @( posedge clk_i )
+  if( state == CALC_MASK_S )
     word_cnt <= storage_struct.words_count;
   else
-    if( readdatavalid_i )
+    if( rd_data_fifo )
       word_cnt <= word_cnt - 1'b1;
 
 always_ff @( posedge clk_i )
-  if( load_stb )
-    last_word <= ( word_cnt == 0 );
+  if( state == CALC_MASK_S )
+    last_word <= ( storage_struct.words_count == 0 );
   else
-    if( readdatavalid_i )
+    if( rd_data_fifo )
       last_word <= ( word_cnt == 1 );
+
+always_ff @( posedge clk_i )
+  if( state == LOAD_S )
+    if( last_word )
+      check_ptrn <= mask_struct.merged;
+    else
+      check_ptrn <= mask_struct.first;
+  else
+    if( pipe_stage_en[0] )
+      if( last_word )
+        check_ptrn <= mask_struct.last;
+      else
+        check_ptrn <= '1;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    load_stb <= 1'b0;
+    pipe_stage_en <= 2'b00;
   else
-    load_stb <= ( rd_storage && ( !storage_empty ) );
+    pipe_stage_en <= { pipe_stage_en[0], rd_data_fifo };
 
 always_ff @( posedge clk_i )
-  if( load_stb )
-    cur_struct <= storage_struct;
-
-always_ff @( posedge clk_i )
-  if( load_stb )
-    check_ptrn <= byteenable_ptrn( 1'b1, storage_struct.start_off, ( storage_struct.words_count == 0 ), storage_struct.end_off );
-  else
-    if( readdatavalid_i )
-      check_ptrn <= byteenable_ptrn( 1'b0, cur_struct.start_off, last_word, cur_struct.end_off );
-
-always_ff @( posedge clk_i )
-  if( load_stb )
+  if( state == LOAD_S )
     data_ptrn <= storage_struct.data_ptrn;
   else
-    if( cur_struct.data_mode == RND_DATA )
-      if( readdatavalid_i )
+    if( storage_struct.data_mode == RND_DATA )
+      if( pipe_stage_en[0] )
         data_ptrn <= { data_ptrn[6:0], data_gen_bit };
 
 always_ff @( posedge clk_i )
-  readdatavalid_delayed <= readdatavalid_i;
-
-always_ff @( posedge clk_i )
-  if( readdatavalid_i )
-    readdata_delayed <= readdata_i;
-
-always_ff @( posedge clk_i )
-  if( readdatavalid_i )
-    check_vector_result <= check_vector( check_ptrn, data_ptrn, readdata_i );
-
-always_ff @( posedge clk_i )
-  if( readdatavalid_i )
-    check_data_ptrn <= data_ptrn;
-
-always_ff @( posedge clk_i )
-  if( check_error )
-    err_data <= readdata_delayed[7 + 8 * ( err_byte( check_vector_result ) ) -: 8];
-
-always_ff @( posedge clk_i )
-  if( check_error )
-    orig_data <= check_data_ptrn;
-
-assign err_data_o = { err_data, orig_data };
-
-always_ff @( posedge clk_i )
-  if( readdatavalid_i )
-    cur_check_addr <= check_addr_cnt;
-
-generate
-if( ADDR_TYPE == "BYTE" )
-  begin
-
-    localparam ADDR_CNT_W = ADDR_W - ADDR_B_W;
-
-    logic [ADDR_CNT_W - 1 : 0] check_addr_cnt;
-
-    always_ff @( posedge clk_i )
-      if( load_stb )
-        check_addr_cnt <= storage_struct.start_addr[ADDR_W - 1 : ADDR_B_W];
-      else
-        if( readdatavalid_i )
-          check_addr_cnt <= check_addr_cnt + 1'b1;
-  end
-else
-  if( ADDR_TYPE == "WORD" )
-    begin
-
-      logic [ADDR_W - 1 : 0] check_addr_cnt;
-
-      always_ff @( posedge clk_i )
-        if( load_stb )
-          check_addr_cnt <= storage_struct.start_addr;
-        else
-          if( readdatavalid_i )
-            check_addr_cnt <= check_addr_cnt + 1'b1;
-    end
-endgenerate
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    stop_checker <= 1'b0;
+  if( state == LOAD_S )
+    check_addr_cnt <= storage_struct.start_addr;
   else
-    if( start_test_i )
-      stop_checker <= 1'b0;
-    else
-      if( check_error )
-        stop_checker <= 1'b1;
+    if( pipe_stage_en[1] )
+      check_addr_cnt <= check_addr_cnt + 1'b1;
 
 always_ff @( posedge clk_i )
-  if( !stop_checker )
-    cmp_error_o <= ( check_error );
+  if( pipe_stage_en[1] )
+    check_addr <= check_addr_cnt;
 
 always_ff @( posedge clk_i )
-  if( check_error )
-    err_addr_o <= { cur_check_addr, err_byte( check_vector_result ) };
+  if( pipe_stage_en[0] )
+    check_vector_result <= check_vector( check_ptrn, data_ptrn, data_fifo_q );
+
+always_ff @( posedge clk_i )
+  if( |pipe_stage_en )
+    check_data_ptrn <= { check_data_ptrn[0], data_ptrn };
+
+always_ff @( posedge clk_i )
+  if( |pipe_stage_en )
+    check_readdata <= { check_readdata[0], data_fifo_q };
+
+always_ff @( posedge clk_i )
+  if( pipe_stage_en[1] )
+    err_byte_num = err_byte_find( check_vector_result );
+
+always_ff @( posedge clk_i )
+  if( pipe_stage_en[1] )
+    check_error <= ( &check_vector_result );
+  else
+    check_error <= 1'b0;
+
+always_ff @( posedge clk_i )
+  if( lock_error_stb )
+    err_addr_o <= { check_addr, err_byte_num };
+
+always_ff @( posedge clk_i )
+  if( lock_error_stb )
+    err_data_o <= { err_byte, check_data_ptrn[1] };
+
+always_ff @( posedge clk_i )
+  if( start_test_i )
+    cmp_error_o <= 1'b0;
+  else
+    if( check_error )
+      cmp_error_o <= 1'b1;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     cmp_busy_o <= 1'b0;
   else
-    if( stop_checker )
+    if( check_error )
       cmp_busy_o <= 1'b0;
     else
-      if( cmp_en_i )
-        cmp_busy_o <= 1'b1;
-      else
-        if( ( !in_process ) && storage_empty )
-          cmp_busy_o <= 1'b0;
-        else
-          if( check_error )
-            cmp_busy_o <= 1'b0;
+      if( state == IDLE_S )
+        cmp_busy_o <= ( !cmp_fifo_empty );
 
-assign check_error  = readdatavalid_delayed && ( &check_vector_result );
-assign data_gen_bit = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
+/*
+generate
+  if( ADDR_TYPE == "BYTE" )
+    begin
+
+    end
+  else
+    if( ADDR_TYPE == "WORD" )
+      begin
+
+      end
+endgenerate
+*/
+
+assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
+assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
+
+assign err_byte         = check_readdata[1][7 + 8 * ( err_byte_num ) -: 8];
+assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
+
+assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
+
+assign lock_error_stb   = check_error && ( !cmp_error_o );
 
 endmodule : compare_block

@@ -1,16 +1,17 @@
 import rtl_settings_pkg::*;
 
 module fifo #(
-  parameter int AWIDTH = 4
+  parameter int AWIDTH = 4,
+  parameter int DWIDTH = 8
 )(
   input                         clk_i,
   input                         srst_i,
 
   input                         wrreq_i,
-  input  cmp_struct_t           data_i,
+  input        [DWIDTH - 1 : 0] data_i,
 
   input                         rdreq_i,
-  output cmp_struct_t           q_o,
+  output logic [DWIDTH - 1 : 0] q_o,
 
   output logic                  empty_o, 
   output logic                  full_o,
@@ -19,7 +20,7 @@ module fifo #(
 
 localparam FIFO_DEPTH = 2**AWIDTH;
 
-cmp_struct_t mem [FIFO_DEPTH - 1 : 0];
+logic [DWIDTH - 1 : 0] mem [FIFO_DEPTH - 1 : 0];
 
 logic [AWIDTH - 1 : 0] rd_ptr;
 logic [AWIDTH - 1 : 0] wr_ptr;

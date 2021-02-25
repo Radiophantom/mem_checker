@@ -14,6 +14,9 @@ parameter string  ADDR_TYPE   = "BYTE"; // "BYTE" or "WORD"
 parameter int     ADDR_W      = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
                                                           ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W ) );
 
+parameter int     CMP_ADDR_W  = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
+                                                          ( ADDR_W            );
+
 parameter int CSR_TEST_START  = 0;
 parameter int CSR_TEST_PARAM  = 1;
 parameter int CSR_SET_ADDR    = 2;
@@ -50,7 +53,7 @@ typedef enum logic {
 } data_mode_t;
 
 typedef struct packed{
-  logic [ADDR_W - 1 : 0]      start_addr;
+  logic [CMP_ADDR_W - 1 : 0]  start_addr;
   logic                       trans_type;
   logic [ADDR_B_W - 1 : 0]    start_off;
   logic [ADDR_B_W - 1 : 0]    end_off;
@@ -59,10 +62,24 @@ typedef struct packed{
   logic [7 : 0]               data_ptrn;
 } cmp_struct_t;
 
+typedef struct packed{
+  logic   [DATA_B_W - 1 : 0]  first;
+  logic   [DATA_B_W - 1 : 0]  last;
+  logic   [DATA_B_W - 1 : 0]  merged;
+} mask_t;
+
+typedef enum logic [2 : 0] {
+  IDLE_S,
+  CALC_MASK_S,
+  LOAD_S,
+  CHECK_S,
+  ERROR_S
+} state_t;
+
 function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
   logic                     start_enable,
-  logic                     end_enable,
   logic [ADDR_B_W - 1 : 0]  start_offset,
+  logic                     end_enable,
   logic [ADDR_B_W - 1 : 0]  end_offset
 );
   for( int i = 0; i < DATA_B_W; i++ )
@@ -87,13 +104,13 @@ function automatic logic [DATA_B_W - 1 : 0] check_vector(
       check_vector[i] = 1'b0;
 endfunction : check_vector
 
-function automatic logic [ADDR_B_W - 1 : 0] err_byte(
-  ref logic [DATA_B_W - 1 : 0] check_vector
+function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
+  logic [DATA_B_W - 1 : 0] check_vector
 );
   for( int i = 0; i < DATA_B_W; i++ )
     if( check_vector[i] )
       return( i );
   return( 0 );
-endfunction : err_byte
+endfunction : err_byte_find
 
 endpackage : rtl_settings_pkg
