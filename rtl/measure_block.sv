@@ -109,10 +109,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     rd_req_flag <= 1'b0;
   else
     if( read_i )
-      if( !waitrequest_i )
-        rd_req_flag <= 1'b0;
-      else
-        rd_req_flag <= 1'b1;
+      rd_req_flag <= waitrequest_i;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -132,36 +129,40 @@ always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
       word_cnt_array[i] <= burstcount_i;
-    else
-      if( readdatavalid_i && ( active_cnt_num == i ) )
-        word_cnt_array[i] <= word_cnt_array[i] - 1'b1; 
-
-always_ff @( posedge clk_i )
-  if( delay_cnt_reg[active_cnt_num] 
-
-always_ff @( posedge clk_i )
-  for( int i = 0; i < CNT_NUM; i++ )
-    if( rd_req_stb && ( load_cnt_num == i ) )
-      last_rd_word_reg[i] <= ( burstcount_i == 1 );
-    else
-      if( readdatavalid_i && ( active_cnt_num == i ) )
-        last_rd_word_reg[i] <= ( word_cnt_array[i] == 2 );
 
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
       delay_cnt_reg[i] <= 1'b1;
     else
-      if( readdatavalid_i && ( active_cnt_num == i ) )
+      if( readdatavalid_i && last_rd_word && ( active_cnt_num == i ) )
         delay_cnt_reg[i] <= 1'b0;
 
 always_ff @( posedge clk_i )
-  for( int i = 0; i < CNT_NUM; i++ )
-    if( rd_req_stb && ( load_cnt_num == i ) )
-      trans_cnt_reg[i] <= 1'b1;
+  if( last_rd_word )
+    cnt_loaded <= 1'b0;
+  else
+    if( delay_cnt_reg[active_cnt_num] )
+      cnt_loaded <= 1'b1;
+
+always_ff @( posedge clk_i )
+  if( cnt_load_stb )
+    if( cur_or_not )
+      word_cnt <= word_cnt_array[active_cnt_num];
     else
-      if( last_rd_word_reg[i] && readdatavalid_i && ( active_cnt_num == i ) )
-        trans_cnt_reg[i] <= 1'b0;
+      word_cnt <= word_cnt_array[active_cnt_num + 1'b1];
+  else
+    if( readdatavalid_i )
+      word_cnt <= word_cnt - 1'b1;
+
+always_comb
+  if( cnt_loaded && readdatavalid_i && last_rd_word )
+    cnt_load_stb = 1'b1;
+  else
+    if( !cnt_loaded && delay_cnt_reg[active_cnt_num] )
+      cnt_load_stb = 1'b1;
+    else
+      cnt_load_stb = 1'b0;
 
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
@@ -170,14 +171,6 @@ always_ff @( posedge clk_i )
     else
       if( delay_cnt_reg[i] )
         delay_cnt_array[i] <= delay_cnt_array[i] + 1'b1;
-
-always_ff @( posedge clk_i )
-  for( int i = 0; i < CNT_NUM; i++ )
-    if( rd_req_stb && ( load_cnt_num == i ) )
-      trans_cnt_array[i] <= 32'( 0 );
-    else
-      if( trans_cnt_reg[i] )
-        trans_cnt_array[i] <= trans_cnt_array[i] + 1'b1;
 
 always_ff @( posedge clk_i )
   if( start_test_i )
