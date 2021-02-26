@@ -68,14 +68,6 @@ typedef struct packed{
   logic   [DATA_B_W - 1 : 0]  merged;
 } mask_t;
 
-typedef enum logic [2 : 0] {
-  IDLE_S,
-  CALC_MASK_S,
-  LOAD_S,
-  CHECK_S,
-  ERROR_S
-} state_t;
-
 function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
   logic                     start_enable,
   logic [ADDR_B_W - 1 : 0]  start_offset,
@@ -95,11 +87,11 @@ endfunction : byteenable_ptrn
 function automatic logic [DATA_B_W - 1 : 0] check_vector(
   logic [DATA_B_W - 1 : 0]    check_ptrn,
   logic [7 : 0]               data_ptrn,
-  logic [AMM_DATA_W - 1 : 0]  readdata
+  logic [AMM_DATA_W / 8 - 1 : 0][7 : 0]  readdata
 );
   for( int i = 0; i < DATA_B_W; i++ )
     if( check_ptrn[i] )
-      check_vector[i] = ( data_ptrn != readdata[7 + i*8 -: 8] );
+      check_vector[i] = ( data_ptrn != readdata[i] );
     else
       check_vector[i] = 1'b0;
 endfunction : check_vector
@@ -112,5 +104,13 @@ function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
       return( i );
   return( 0 );
 endfunction : err_byte_find
+
+function automatic logic [ADDR_B_W : 0] bytes_count_func(
+  logic [DATA_B_W - 1 : 0] byteenable
+);
+  for( int i = 0; i < DATA_B_W; i++ )
+    if( byteenable[i] )
+      bytes_count_func++;
+endfunction : bytes_count_func
 
 endpackage : rtl_settings_pkg

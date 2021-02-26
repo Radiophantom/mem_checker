@@ -123,8 +123,8 @@ transmitter_block transmitter_block_inst(
 );
 
 compare_block compare_block_inst(
-  .clk_i            ( rst_i                     ),
-  .rst_i            ( clk_mem_i                 ),
+  .rst_i            ( rst_i                     ),
+  .clk_i            ( clk_mem_i                 ),
                                                  
   .start_test_i     ( start_test                ),
                                                   

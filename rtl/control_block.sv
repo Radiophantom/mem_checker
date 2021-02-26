@@ -52,7 +52,7 @@ logic                     finished_flag;
 
 logic                     last_trans_stb;
 logic                     cmd_accepted_stb;
-logic                     preset_stb;
+logic                     addr_preset_stb;
 
 logic                     finished_state;
 logic                     cnt_en_state;
@@ -141,9 +141,9 @@ always_comb
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
-    preset_stb <= 1'b0;
+    addr_preset_stb <= 1'b0;
   else
-    preset_stb <= start_test_i;
+    addr_preset_stb <= start_test_i;
 
 always_ff @( posedge clk_i )
   if( start_test_i )
@@ -204,7 +204,7 @@ assign cnt_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S 
 
 assign finished_state     = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
-assign next_addr_stb      = ( preset_stb || ( cnt_en_state && cmd_accepted_stb ) );
+assign next_addr_stb      = ( addr_preset_stb || ( cnt_en_state && cmd_accepted_stb ) );
 
 assign finished_flag      = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
 

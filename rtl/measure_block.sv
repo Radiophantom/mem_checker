@@ -30,6 +30,21 @@ module measure_block(
 localparam CNT_NUM  = 4; // amount of cnt for concurrent delay count
 localparam CNT_W    = $clog2( CNT_NUM );
 
+logic                 rd_req_flag;
+logic                 rd_req_stb;
+logic                 wr_unit_stb;
+logic                 last_rd_word_stb;
+logic [1 : 0]         save_delay_stb;
+
+logic [CNT_W - 1 : 0] load_cnt_num;
+logic [CNT_W - 1 : 0] active_cnt_num;
+logic [CNT_W - 1 : 0] save_cnt_num;
+
+logic [15 : 0]        cmp_delay;
+logic [15 : 0]        min_delay;
+logic [15 : 0]        max_delay;
+
+
 function automatic logic [ADDR_B_W : 0] bytes_count_func(
   logic [DATA_B_W - 1 : 0] byteenable
 );
@@ -38,20 +53,22 @@ function automatic logic [ADDR_B_W : 0] bytes_count_func(
       bytes_count_func++;
 endfunction : bytes_count_func
 
-logic                 rd_req_flag;
-logic                 rd_req_stb;
-logic                 wr_unit_stb;
-logic                 last_rd_word_stb;
-logic                 save_delay_stb;
-
-logic [CNT_W - 1 : 0] load_cnt_num;
-logic [CNT_W - 1 : 0] active_cnt_num;
-logic [CNT_W - 1 : 0] save_cnt_num;
-
-logic [15 : 0]        min_delay;
-logic [15 : 0]        max_delay;
-
 /*
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    count_valid <= 2'b00;
+  else
+    count_valid <= { count_valid[0], wr_unit_stb };
+
+always_ff @( posedge clk_i )
+  for( int i = 0; i < DATA_B_W / 32; i++ )
+    if( count_valid[i] )
+      temp_amount[i] <= temp_amount[i - 1] + bytes_count_func( byteenable_i[31 + 8 * i -: 32] );
+
+always_ff @( posedge clk_i )
+  if( bytes_amount[$right( bytes_amount )] )
+    bytes_amount <= bytes_amount + temp_amount;
+
 always_ff @( posedge clk_i )
   if( start_test_i )
     wr_units_o <= 32'( 0 );
@@ -120,6 +137,9 @@ always_ff @( posedge clk_i )
         word_cnt_array[i] <= word_cnt_array[i] - 1'b1; 
 
 always_ff @( posedge clk_i )
+  if( delay_cnt_reg[active_cnt_num] 
+
+always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
       last_rd_word_reg[i] <= ( burstcount_i == 1 );
@@ -163,7 +183,7 @@ always_ff @( posedge clk_i )
   if( start_test_i )
     rd_req_amount_o <= 32'( 0 );
   else
-    if( save_delay_stb )
+    if( save_delay_stb[1] )
       rd_req_amount_o <= rd_req_amount_o + 1'b1;
 
 always_ff @( posedge clk_i )
@@ -192,28 +212,33 @@ always_ff @( posedge clk_i )
     save_cnt_num <= active_cnt_num;
 
 always_ff @( posedge clk_i )
-  save_delay_stb <= last_rd_word_stb;
+  save_delay_stb <= { save_delay_stb[0], last_rd_word_stb };
 
-/*always_ff @( posedge clk_i )
+always_ff @( posedge clk_i )
+  cmp_delay <= delay_cnt_array[save_cnt_num];
+
+always_ff @( posedge clk_i )
   if( start_test_i )
     min_delay <= 16'hFF_FF;
   else
-    if( save_delay_stb && ( delay_cnt_array[save_cnt_num] < min_delay ) )
-      min_delay <= delay_cnt_array[save_cnt_num];
+    if( save_delay_stb[1] )
+      if( cmp_delay < min_delay )
+      min_delay <= cmp_delay;
 
 always_ff @( posedge clk_i )
   if( start_test_i )
     max_delay <= 16'h0;
   else
-    if( save_delay_stb && ( delay_cnt_array[save_cnt_num] > max_delay ) )
-      max_delay <= delay_cnt_array[save_cnt_num];
-*/
+    if( save_delay_stb[1] )
+      if( cmp_delay > max_delay )
+      max_delay <= cmp_delay;
+
 always_ff @( posedge clk_i )
   if( start_test_i )
     sum_delay_o <= 32'( 0 );
   else
-    if( save_delay_stb )
-      sum_delay_o <= sum_delay_o + delay_cnt_array[save_cnt_num];
+    if( save_delay_stb[1] )
+      sum_delay_o <= sum_delay_o + cmp_delay;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )

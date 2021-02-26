@@ -42,7 +42,7 @@ fifo #(
 );
 
 fifo #(
-  .AWIDTH   ( 3               ),
+  .AWIDTH   ( 6               ),
   .DWIDTH   ( AMM_DATA_W      )
 ) data_fifo_inst (
   .clk_i    ( clk_i           ),
@@ -59,11 +59,12 @@ fifo #(
 
 cmp_struct_t                        storage_struct;
 
-logic   [CMP_W - 1      : 0]        cmp_fifo_q;
-logic   [AMM_DATA_W - 1 : 0]        data_fifo_q;
+logic   [CMP_W - 1      : 0]            cmp_fifo_q;
+
+logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0] data_fifo_q;
+logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0] check_readdata;
 
 logic   [ADDR_CNT_W - 1 : 0]        check_addr_cnt;
-logic   [ADDR_CNT_W - 1 : 0]        check_addr;
 
 logic   [ADDR_B_W - 1 : 0]          err_byte_num;
 logic   [7 : 0]                     err_byte;
@@ -77,7 +78,7 @@ logic                               last_word;
 
 logic   [1 : 0]                     pipe_stage_en;
 logic   [1 : 0][7 : 0]              check_data_ptrn;
-logic   [1 : 0][AMM_DATA_W - 1 : 0] check_readdata;
+logic   [1 : 0][ADDR_CNT_W - 1 : 0] check_addr;
 
 logic                               rd_data_fifo, data_fifo_empty;
 logic                               rd_cmp_fifo,  cmp_fifo_empty;
@@ -89,7 +90,13 @@ logic                               data_gen_bit;
 
 mask_t                              mask_struct;
 
-state_t                             state, next_state;
+enum logic [2 : 0] {
+  IDLE_S,
+  CALC_MASK_S,
+  LOAD_S,
+  CHECK_S,
+  ERROR_S
+} state, next_state;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -107,7 +114,11 @@ always_comb
       IDLE_S :
         begin
           if( !cmp_fifo_empty )
-            next_state = CALC_MASK_S;
+            if( ADDR_TYPE == "BYTE" )
+              next_state = CALC_MASK_S;
+            else
+              if( ADDR_TYPE == "WORD" )
+                next_state = LOAD_S;
         end
 
       CALC_MASK_S :
@@ -139,40 +150,74 @@ always_comb
     endcase
   end
 
-always_ff @( posedge clk_i )
-  if( state == CALC_MASK_S )
-    begin
-      mask_struct.first   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
-      mask_struct.last    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
-      mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
+generate
+  if( ADDR_TYPE == "BYTE" )
+    begin : byte_address
+
+      always_ff @( posedge clk_i )
+        if( state == CALC_MASK_S )
+          begin
+            mask_struct.first   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
+            mask_struct.last    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
+            mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
+          end
+
+      always_ff @( posedge clk_i )
+        if( state == CALC_MASK_S )
+          word_cnt <= storage_struct.words_count;
+        else
+          if( rd_data_fifo )
+            word_cnt <= word_cnt - 1'b1;
+
+      always_ff @( posedge clk_i )
+        if( state == CALC_MASK_S )
+          last_word <= ( storage_struct.words_count == 0 );
+        else
+          if( rd_data_fifo )
+            last_word <= ( word_cnt == 1 );
+
+      always_ff @( posedge clk_i )
+        if( state == LOAD_S )
+          if( last_word )
+            check_ptrn <= mask_struct.merged;
+          else
+            check_ptrn <= mask_struct.first;
+        else
+          if( pipe_stage_en[0] )
+            if( last_word )
+              check_ptrn <= mask_struct.last;
+            else
+              check_ptrn <= '1;
+
+        always_ff @( posedge clk_i )
+          if( pipe_stage_en[0] )
+            check_vector_result <= check_vector( check_ptrn, data_ptrn, data_fifo_q );
+
     end
-
-always_ff @( posedge clk_i )
-  if( state == CALC_MASK_S )
-    word_cnt <= storage_struct.words_count;
   else
-    if( rd_data_fifo )
-      word_cnt <= word_cnt - 1'b1;
+    if( ADDR_TYPE == "WORD" )
+      begin : word_address
 
-always_ff @( posedge clk_i )
-  if( state == CALC_MASK_S )
-    last_word <= ( storage_struct.words_count == 0 );
-  else
-    if( rd_data_fifo )
-      last_word <= ( word_cnt == 1 );
+        always_ff @( posedge clk_i )
+          if( state == LOAD_S )
+            word_cnt <= storage_struct.words_count;
+          else
+            if( rd_data_fifo )
+              word_cnt <= word_cnt - 1'b1;
 
-always_ff @( posedge clk_i )
-  if( state == LOAD_S )
-    if( last_word )
-      check_ptrn <= mask_struct.merged;
-    else
-      check_ptrn <= mask_struct.first;
-  else
-    if( pipe_stage_en[0] )
-      if( last_word )
-        check_ptrn <= mask_struct.last;
-      else
-        check_ptrn <= '1;
+        always_ff @( posedge clk_i )
+          if( state == LOAD_S )
+            last_word <= ( storage_struct.words_count == 0 );
+          else
+            if( rd_data_fifo )
+              last_word <= ( word_cnt == 1 );
+
+        always_ff @( posedge clk_i )
+          if( pipe_stage_en[0] )
+            check_vector_result <= check_vector( '1, data_ptrn, data_fifo_q );
+
+      end
+endgenerate
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -192,16 +237,12 @@ always_ff @( posedge clk_i )
   if( state == LOAD_S )
     check_addr_cnt <= storage_struct.start_addr;
   else
-    if( pipe_stage_en[1] )
+    if( pipe_stage_en[0] )
       check_addr_cnt <= check_addr_cnt + 1'b1;
 
 always_ff @( posedge clk_i )
-  if( pipe_stage_en[1] )
-    check_addr <= check_addr_cnt;
-
-always_ff @( posedge clk_i )
-  if( pipe_stage_en[0] )
-    check_vector_result <= check_vector( check_ptrn, data_ptrn, data_fifo_q );
+  if( |pipe_stage_en )
+    check_addr <= { check_addr[0], check_addr_cnt };
 
 always_ff @( posedge clk_i )
   if( |pipe_stage_en )
@@ -223,7 +264,7 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
-    err_addr_o <= { check_addr, err_byte_num };
+    err_addr_o <= { check_addr[1], err_byte_num };
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
@@ -246,24 +287,10 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( state == IDLE_S )
         cmp_busy_o <= ( !cmp_fifo_empty );
 
-/*
-generate
-  if( ADDR_TYPE == "BYTE" )
-    begin
-
-    end
-  else
-    if( ADDR_TYPE == "WORD" )
-      begin
-
-      end
-endgenerate
-*/
-
 assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
 assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
 
-assign err_byte         = check_readdata[1][7 + 8 * ( err_byte_num ) -: 8];
+assign err_byte         = check_readdata[1][err_byte_num];
 assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
 
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
