@@ -1,107 +1,119 @@
 import rtl_settings_pkg::*;
 
 module csr_block( 
-  input                           rst_i,
-  input                           clk_sys_i,
-  input                           clk_mem_i,
+  input                                                   rst_i,
+  input                                                   clk_sys_i,
+  input                                                   clk_mem_i,
 
   // Input Avalon-MM interface
 
-  input                           read_i,                 // 0 cycle delay to readdata | read_i     -> _/TTT\_
-  input                           write_i,                //                           | readdata_o -> ______/TTT\_
-  input         [3  : 0]          address_i,
-  input         [31 : 0]          writedata_i,
+  input                                                   read_i,
+  input                                                   write_i,
+  input                                        [3  : 0]   address_i,
+  input                                        [31 : 0]   writedata_i,
 
-  output  logic [31 : 0]          readdata_o,
+  output logic                                            readdatavalid_o,
+  output logic                                 [31 : 0]   readdata_o,
 
   // Output checker interface
-  input                           test_finished_i, 
-  input         [14 : 5][31 : 0]  test_result_i,
+  input                                                   test_finished_i, 
+  input         [CSR_RD_REQ : CSR_TEST_RESULT ][31 : 0]   test_result_i,
 
-  output logic                    start_test_o,
-  output logic  [3  : 1][31 : 0]  test_param_o 
+  output logic                                            start_test_o,
+  output logic  [CSR_SET_DATA : CSR_TEST_PARAM][31 : 0]   test_param_o 
 );
 
-logic [2  : 0]          test_finished_sync_reg;
-logic                   test_finished_stb;
-logic [2  : 0]          rst_start_test_sync_reg;
-logic                   rst_start_bit_stb;
-logic [2  : 0]          start_test_sync_reg;
+logic                                 [2  : 0]  test_finished_reg;
+logic                                           test_finished_stb;
 
-logic [14 : 4][31 : 0]  csr_reg;
+logic                                 [2  : 0]  rst_start_bit_reg;
+logic                                           rst_start_bit_stb;
 
-logic [3  : 0][31 : 0]  wr_csr_reg;
-logic [14 : 0][31 : 0]  rd_csr_reg;
+logic                                 [2  : 0]  start_test_reg;
+logic                                           start_test_stb;
+
+logic                                           read_req;
+logic                                 [3  : 0]  read_addr;
+
+logic [CSR_RD_REQ   : CSR_TEST_FINISH][31 : 0]  result_csr;
+
+logic                                 [31 : 0]  start_test_csr;
+logic [CSR_SET_DATA : CSR_TEST_PARAM ][31 : 0]  test_param_csr;
+logic [CSR_RD_REQ   : CSR_TEST_START ][31 : 0]  rd_csr;
 
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
-    csr_reg[4][0] <= 1'b0;
+    start_test_csr[0] <= 1'b0;
+  else
+    if( rst_start_bit_stb )
+      start_test_csr[0] <= 1'b0;
+    else
+      if( write_i && ( address_i == CSR_TEST_START ) )
+        start_test_csr[0] <= writedata_i[0];
+
+always_ff @( posedge clk_sys_i )
+  if( write_i )
+    test_param_csr[address_i] <= writedata_i;
+
+always_ff @( posedge clk_sys_i, posedge rst_i )
+  if( rst_i )
+    result_csr[CSR_TEST_FINISH][0] <= 1'b0;
   else
     if( test_finished_stb )
-      csr_reg[4][0] <= 1'b1;
+      result_csr[CSR_TEST_FINISH][0] <= 1'b1;
     else
-      if( read_i && ( address_i == 4 ) )
-        csr_reg[4][0] <= 1'b0;
+      if( read_req && ( read_addr == CSR_TEST_FINISH ) )
+        result_csr[CSR_TEST_FINISH][0] <= 1'b0;
 
 always_ff @( posedge clk_sys_i )
   if( test_finished_stb )
-    begin
-      csr_reg[CSR_TEST_RESULT ] <= test_result_i[CSR_TEST_RESULT ];
-      csr_reg[CSR_ERR_ADDR    ] <= test_result_i[CSR_ERR_ADDR    ];
-      csr_reg[CSR_ERR_DATA    ] <= test_result_i[CSR_ERR_DATA    ];
-      csr_reg[CSR_WR_TICKS    ] <= test_result_i[CSR_WR_TICKS    ];
-      csr_reg[CSR_WR_UNITS    ] <= test_result_i[CSR_WR_UNITS    ];
-      csr_reg[CSR_RD_TICKS    ] <= test_result_i[CSR_RD_TICKS    ];
-      csr_reg[CSR_RD_WORDS    ] <= test_result_i[CSR_RD_WORDS    ];
-      csr_reg[CSR_MIN_MAX_DEL ] <= test_result_i[CSR_MIN_MAX_DEL ];
-      csr_reg[CSR_SUM_DEL     ] <= test_result_i[CSR_SUM_DEL     ];
-      csr_reg[CSR_RD_REQ      ] <= test_result_i[CSR_RD_REQ      ];
-    end
+    result_csr[CSR_RD_REQ : CSR_TEST_RESULT] <= test_result_i;
     
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
-    wr_csr_reg[0][0] <= 1'b0;
+    read_req <= 1'b0;
   else
-    if( address_i == 0 )
-      begin
-        if( rst_start_bit_stb )
-          wr_csr_reg[0][0] <= 1'b0;
-        else
-          if( write_i )
-            wr_csr_reg[0][0] <= writedata_i[0];
-      end
-    else
-      if( write_i )
-        wr_csr_reg[address_i] <= writedata_i;
+    read_req <= read_i;
 
 always_ff @( posedge clk_sys_i )
   if( read_i )
-    readdata_o <= rd_csr_reg[address_i];
+    read_addr <= address_i;
+
+always_ff @( posedge clk_sys_i, posedge rst_i )
+  if( rst_i )
+    readdatavalid_o <= 1'b0;
+  else
+    readdatavalid_o <= read_req;
+
+always_ff @( posedge clk_sys_i )
+  if( read_req )
+    readdata_o <= read_csr[read_addr];
 
 always_ff @( posedge clk_mem_i, posedge rst_i )
   if( rst_i )
-    start_test_sync_reg <= 3'd0;
+    start_test_reg <= 3'( 0 );
   else
-    start_test_sync_reg <= { start_test_sync_reg[1:0], wr_csr_reg[0][0] };
+    start_test_reg <= { start_test_reg[1 : 0], test_param_csr[CSR_TEST_START][0] };
 
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
-    rst_start_test_sync_reg <= 3'd0;
+    rst_start_bit_reg <= 3'( 0 );
   else
-    rst_start_test_sync_reg <= { rst_start_test_sync_reg[1:0], start_test_o };
+    rst_start_bit_reg <= { rst_start_bit_reg[1 : 0], start_test_reg[1] };
 
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
-    test_finished_sync_reg <= 3'd0;
+    test_finished_reg <= 3'( 0 );
   else
-    test_finished_sync_reg <= { test_finished_sync_reg[1:0], test_finished_i };
+    test_finished_reg <= { test_finished_reg[1 : 0], test_finished_i };
 
-assign test_finished_stb  = ( test_finished_sync_reg[1]   && !test_finished_sync_reg[2]   );
-assign start_test_o       = ( start_test_sync_reg[1]      && !start_test_sync_reg[2]      );
-assign rst_start_bit_stb  = ( rst_start_test_sync_reg[1]  && !rst_start_test_sync_reg[2]  );
+assign start_test_stb     = ( start_test_reg   [1]  && ( !start_test_reg   [2] ) );
+assign rst_start_bit_stb  = ( rst_start_bit_reg[1]  && ( !rst_start_bit_reg[2] ) );
+assign test_finished_stb  = ( test_finished_reg[1]  && ( !test_finished_reg[2] ) );
 
-assign rd_csr_reg       = { csr_reg, wr_csr_reg };
+assign read_csr           = { result_csr, test_param_csr, start_test_csr };
 
-assign test_param_o = wr_csr_reg[3:1];
+assign start_test_o       = start_test_stb;
+assign test_param_o       = test_param_csr[CSR_SET_DATA : CSR_TEST_PARAM];
 
 endmodule : csr_block
