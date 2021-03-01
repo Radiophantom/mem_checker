@@ -54,9 +54,9 @@ logic                     last_transaction_stb;
 logic                     cmd_accepted_stb;
 logic                     addr_preset_stb;
 
-logic                     finish_state;
-logic                     cnt_en_state;
 logic                     trans_en_state; 
+logic                     cnt_en_state;
+logic                     finish_state;
 
 logic                     cmd_accept_ready;
 
@@ -178,8 +178,17 @@ always_ff @( posedge clk_i )
     trans_type_o <= ( test_mode == READ_ONLY );
   else
     case( state )
-      WRITE_WORD_S : trans_type_o <= (  cmd_accepted_stb );
-      READ_WORD_S  : trans_type_o <= ( !cmd_accepted_stb );
+      WRITE_WORD_S :
+        begin
+          if( cmd_accepted_stb )
+            trans_type_o <= 1'b1;
+        end
+
+      READ_WORD_S :
+        begin
+          if( cmd_accepted_stb )
+            trans_type_o <= 1'b0;
+        end
     endcase
 
 always_ff @( posedge clk_i )

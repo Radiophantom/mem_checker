@@ -27,6 +27,7 @@ module measure_block(
   output logic  [31:0]                rd_req_amount_o
 );
 
+
 localparam CNT_NUM  = 4; // amount of cnt for concurrent delay count
 localparam CNT_W    = $clog2( CNT_NUM );
 
@@ -130,7 +131,7 @@ always_ff @( posedge clk_i )
     if( rd_req_stb && ( load_cnt_num == i ) )
       word_cnt_array[i] <= burstcount_i;
 
-always_ff @( posedge clk_i )
+/*always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
       delay_cnt_reg[i] <= 1'b1;
@@ -260,6 +261,7 @@ generate
           if( wr_dly_stb )
             wr_units_o <= wr_units_o + bytes_amount;
 */
+/*
     end
   else
     if( ADDR_TYPE == "WORD" )
@@ -281,5 +283,5 @@ assign wr_unit_stb      = ( write_i && ( !waitrequest_i ) );
 assign last_rd_word_stb = last_rd_word_reg[active_cnt_num] && readdatavalid_i;
 
 assign min_max_delay_o  = { min_delay, max_delay };
-
+*/
 endmodule : measure_block

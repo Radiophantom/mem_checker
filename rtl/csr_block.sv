@@ -92,7 +92,7 @@ always_ff @( posedge clk_mem_i, posedge rst_i )
   if( rst_i )
     test_start_reg <= 3'( 0 );
   else
-    test_start_reg <= { test_start_reg[1 : 0], test_param_csr[CSR_TEST_START][0] };
+    test_start_reg <= { test_start_reg[1 : 0], test_start_csr[0] };
 
 always_ff @( posedge clk_sys_i, posedge rst_i )
   if( rst_i )
@@ -113,6 +113,6 @@ assign test_finished_stb  = ( test_finished_reg[1]  && ( !test_finished_reg[2] )
 assign read_csr           = { result_csr, test_param_csr, test_start_csr };
 
 assign test_start_o       = test_start_stb;
-assign test_param_o       = test_param_csr[CSR_SET_DATA : CSR_TEST_PARAM];
+assign test_param_o       = test_param_csr;
 
 endmodule : csr_block
