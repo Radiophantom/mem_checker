@@ -71,16 +71,6 @@ always_ff @( posedge clk_i, posedge rst_i )
 
 always_ff @( posedge clk_i )
   if( start_stb )
-    if( ADDR_TYPE == "BYTE" )
-      burst_cnt <= burstcount_exp;
-    else
-      burst_cnt <= burstcount;
-  else
-    if( wr_unit_stb )
-      burst_cnt <= burst_cnt - 1'b1;
-
-always_ff @( posedge clk_i )
-  if( start_stb )
     if( storage_struct.trans_type )
       last_transaction <= 1'b1;
     else
@@ -107,7 +97,7 @@ generate
         if( trans_valid_i && trans_ready_o )
           begin
             storage_struct.trans_type <= trans_type_i;
-            storage_struct.start_addr <= trans_addr_i[ADDR_W - 1   : ADDR_B_W];
+            storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
             storage_struct.end_off    <= trans_addr_i[ADDR_B_W - 1 :        0] + burstcount;
           end
@@ -127,6 +117,13 @@ generate
             burstcount_exp = AMM_BURST_W'( 1 );
           else
             burstcount_exp = AMM_BURST_W'( 0 );
+
+      always_ff @( posedge clk_i )
+        if( start_stb )
+          burst_cnt <= burstcount_exp;
+        else
+          if( wr_unit_stb )
+            burst_cnt <= burst_cnt - 1'b1;
 
       always_ff @( posedge clk_i )
         if( start_stb )
@@ -150,7 +147,7 @@ generate
           if( storage_struct.trans_type )
             burstcount_o <= burstcount_exp + 1'b1;
           else
-            burstcount_o <= burstcount + 1'b1;
+            burstcount_o <= burstcount     + 1'b1;
 
       always_ff @( posedge clk_i )
         if( start_stb )
@@ -164,7 +161,8 @@ generate
             else
               byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !storage_burst_en ),  storage_struct.end_off  );
           else
-            byteenable_o   <= byteenable_ptrn( 1'b0, cur_struct.start_off,      last_transaction,       cur_struct.end_off      );
+            if( !last_transaction )
+              byteenable_o   <= byteenable_ptrn( 1'b0, cur_struct.start_off,      ( last_transaction  ),  cur_struct.end_off      );
 
     end
   else
@@ -185,13 +183,20 @@ generate
         always_comb
           begin
             cmp_struct_o.start_addr   = storage_struct.start_addr;
-            cmp_struct_o.data_mode    = data_mode;
             cmp_struct_o.words_count  = burstcount;
+            cmp_struct_o.data_mode    = data_mode;
             if( data_mode == RND_DATA )
               cmp_struct_o.data_ptrn  = rnd_data;
             else
               cmp_struct_o.data_ptrn  = data_ptrn;
           end
+
+        always_ff @( posedge clk_i )
+          if( start_stb )
+            burst_cnt <= burstcount;
+          else
+            if( wr_unit_stb )
+              burst_cnt <= burst_cnt - 1'b1;
 
         always_ff @( posedge clk_i )
           if( start_stb )
@@ -227,25 +232,22 @@ always_ff @( posedge clk_i, posedge rst_i )
         read_o <= 1'b0;
 
 always_ff @( posedge clk_i )
-  if( start_stb || wr_unit_stb )
+  if( writedata_en ) 
     if( data_mode == RND_DATA )
       writedata_o <= { DATA_B_W{ rnd_data  } };
     else
       writedata_o <= { DATA_B_W{ data_ptrn } };
-
+    
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rnd_data <= '1;
   else
-    if( rnd_data_en )
+    if( writedata_en && ( data_mode == RND_DATA ) )
       rnd_data <= { rnd_data[6 : 0], data_gen_bit };
 
 always_comb
   if( test_mode == WRITE_AND_CHECK )
-    if( start_stb && ( !storage_struct.trans_type ) )
-      cmp_en_o = 1'b1;
-    else
-      cmp_en_o = 1'b0;
+    cmp_en_o = ( start_stb && ( !storage_struct.trans_type ) );
   else
     cmp_en_o = 1'b0;
 
@@ -255,13 +257,14 @@ assign burstcount           = test_param_i[CSR_TEST_PARAM][AMM_BURST_W - 2 : 0];
 assign data_mode            = data_mode_t'( test_param_i[CSR_TEST_PARAM][12]      );
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][17 : 16] );
 
-assign rnd_data_en          = ( data_mode == RND_DATA ) && ( start_stb || wr_unit_stb );
-
 assign data_gen_bit         = ( rnd_data[6] ^ rnd_data[1] ^ rnd_data[0] );
 
 assign trans_busy_o         = ( in_process || storage_valid );
 
 assign trans_ready_o        = ( !in_process );
+
+assign writedata_en         = ( start_stb     && ( !storage_struct.trans_type ) ) ||
+                              ( wr_unit_stb   && ( !last_transaction          ) );
 
 assign wr_unit_stb          = ( !waitrequest_i  ) && ( write_o              );
 assign last_transaction_stb = ( !waitrequest_i  ) && ( last_transaction     );
