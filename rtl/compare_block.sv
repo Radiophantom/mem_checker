@@ -1,25 +1,24 @@
 import rtl_settings_pkg::*;
 
 module compare_block(
-  input                               clk_i,
-  input                               rst_i,
+  input                                                 rst_i,
+  input                                                 clk_i,
 
-  input                               start_test_i,
+  input                                                 test_start_i,
 
   // AMM interface
-  input                               readdatavalid_i,
-  input         [AMM_DATA_W - 1 : 0]  readdata_i,
+  input                                                 readdatavalid_i,
+  input         [AMM_DATA_W - 1 : 0]                    readdata_i,
 
   // Transmitter interface
-  input                               cmp_en_i,
-  input  cmp_struct_t                 cmp_struct_i,
+  input                                                 cmp_en_i,
+  input  cmp_struct_t                                   cmp_struct_i,
 
   // Error interface
-  output logic                        cmp_error_o,
-  output logic  [31 : 0]              err_addr_o,
-  output logic  [31 : 0]              err_data_o,
+  output logic                                          cmp_error_o,
+  output logic  [CSR_ERR_DATA : CSR_ERR_ADDR][31 : 0]   err_result_o,
 
-  output logic                        cmp_busy_o
+  output logic                                          cmp_busy_o
 );
 
 localparam int CMP_W      = $bits( cmp_struct_t             );
@@ -30,7 +29,7 @@ fifo #(
   .DWIDTH   ( CMP_W           )
 ) cmp_fifo_inst (
   .clk_i    ( clk_i           ),
-  .srst_i   ( start_test_i    ),
+  .srst_i   ( test_start_i    ),
 
   .wrreq_i  ( cmp_en_i        ),
   .data_i   ( cmp_struct_i    ),
@@ -46,7 +45,7 @@ fifo #(
   .DWIDTH   ( AMM_DATA_W      )
 ) data_fifo_inst (
   .clk_i    ( clk_i           ),
-  .srst_i   ( start_test_i    ),
+  .srst_i   ( test_start_i    ),
 
   .wrreq_i  ( readdatavalid_i ),
   .data_i   ( readdata_i      ),
@@ -57,38 +56,38 @@ fifo #(
   .empty_o  ( data_fifo_empty )
 );
 
-cmp_struct_t                        storage_struct;
+cmp_struct_t                                    storage_struct;
 
-logic   [CMP_W - 1      : 0]            cmp_fifo_q;
+logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0]  check_readdata;
+logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
 
-logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0] data_fifo_q;
-logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0] check_readdata;
+logic   [CMP_W - 1      : 0]                    cmp_fifo_q;
 
-logic   [ADDR_CNT_W - 1 : 0]        check_addr_cnt;
+logic   [ADDR_CNT_W - 1 : 0]                    check_addr_cnt;
 
-logic   [ADDR_B_W - 1 : 0]          err_byte_num;
-logic   [7 : 0]                     err_byte;
+logic   [ADDR_B_W - 1 : 0]                      err_byte_num;
+logic   [7 : 0]                                 err_byte;
 
-logic   [DATA_B_W - 1 : 0]          check_ptrn;
-logic   [DATA_B_W - 1 : 0]          check_vector_result;
-logic   [7 : 0]                     data_ptrn;
+logic   [DATA_B_W - 1 : 0]                      check_ptrn;
+logic   [DATA_B_W - 1 : 0]                      check_vector_result;
+logic   [7 : 0]                                 data_ptrn;
 
-logic   [AMM_BURST_W - 2 : 0]       word_cnt;
-logic                               last_word;
+logic   [AMM_BURST_W - 2 : 0]                   word_cnt;
+logic                                           last_word;
 
-logic   [1 : 0]                     pipe_stage_en;
-logic   [1 : 0][7 : 0]              check_data_ptrn;
-logic   [1 : 0][ADDR_CNT_W - 1 : 0] check_addr;
+logic   [1 : 0]                                 pipe_stage_en;
+logic   [1 : 0][7 : 0]                          check_data_ptrn;
+logic   [1 : 0][ADDR_CNT_W - 1 : 0]             check_addr;
 
-logic                               rd_data_fifo, data_fifo_empty;
-logic                               rd_cmp_fifo,  cmp_fifo_empty;
+logic                                           rd_data_fifo, data_fifo_empty;
+logic                                           rd_cmp_fifo,  cmp_fifo_empty;
 
-logic                               check_error;
-logic                               lock_error_stb;
+logic                                           check_error;
+logic                                           lock_error_stb;
 
-logic                               data_gen_bit;
+logic                                           data_gen_bit;
 
-mask_t                              mask_struct;
+mask_t                                          mask_struct;
 
 enum logic [2 : 0] {
   IDLE_S,
@@ -139,7 +138,7 @@ always_comb
 
       ERROR_S :
         begin
-          if( start_test_i )
+          if( test_start_i )
             next_state = IDLE_S;
         end
 
@@ -264,14 +263,14 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
-    err_addr_o <= { check_addr[1], err_byte_num };
+    err_result_o[CSR_ERR_ADDR] <= { check_addr[1], err_byte_num };
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
-    err_data_o <= { err_byte, check_data_ptrn[1] };
+    err_result_o[CSR_ERR_DATA] <= { err_byte, check_data_ptrn[1] };
 
 always_ff @( posedge clk_i )
-  if( start_test_i )
+  if( test_start_i )
     cmp_error_o <= 1'b0;
   else
     if( check_error )

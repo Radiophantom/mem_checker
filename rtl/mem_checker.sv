@@ -28,7 +28,7 @@ module mem_checker(
   output logic  [DATA_B_W - 1 : 0]    mem_byteenable_o
 );
 
-logic [15 : 0][31 : 0]  csr_registers;
+logic [CSR_RD_REQ : CSR_TEST_START][31 : 0]  csr_registers;
 
 logic test_finish;
 logic test_result;
@@ -126,7 +126,7 @@ compare_block compare_block_inst(
   .rst_i            ( rst_i                     ),
   .clk_i            ( clk_mem_i                 ),
                                                  
-  .start_test_i     ( test_start                ),
+  .test_start_i     ( test_start                ),
                                                   
   .readdatavalid_i  ( mem_readdatavalid_i       ),
   .readdata_i       ( mem_readdata_i            ),
@@ -135,8 +135,7 @@ compare_block compare_block_inst(
   .cmp_struct_i     ( cmp_struct                ),
                                                   
   .cmp_error_o      ( cmp_error                 ),
-  .err_addr_o       ( csr_registers[CSR_ERR_ADDR]          ),
-  .err_data_o       ( csr_registers[CSR_ERR_DATA]          ),
+  .err_result_o     ( csr_registers[CSR_ERR_DATA : CSR_ERR_ADDR] ),
                                                   
   .cmp_busy_o       ( cmp_busy                  )
 );
@@ -153,17 +152,11 @@ measure_block measure_block_inst(
   .burstcount_i       ( mem_burstcount_o    ),
   .byteenable_i       ( mem_byteenable_o    ),
 
-  .start_test_i       ( test_start          ),
+  .test_start_i       ( test_start          ),
 
-  .meas_block_busy_o  ( meas_busy     ),
+  .meas_busy_o  ( meas_busy     ),
 
-  .wr_ticks_o         ( csr_registers[8]    ),
-  .wr_units_o         ( csr_registers[9]    ),
-  .rd_ticks_o         ( csr_registers[10]   ),
-  .rd_words_o         ( csr_registers[11]   ),
-  .min_max_delay_o    ( csr_registers[12]   ),
-  .sum_delay_o        ( csr_registers[13]   ),
-  .rd_req_amount_o    ( csr_registers[14]   )
+  .meas_result_o      ( csr_registers[CSR_RD_REQ : CSR_WR_TICKS] )
 );
 
 endmodule : mem_checker

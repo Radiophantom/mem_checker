@@ -45,15 +45,17 @@ logic         [7 : 0]                 data_ptrn;
 logic         [7 : 0]                 rnd_data = 8'hFF;
 logic                                 data_gen_bit;
 
-logic                                 rnd_data_en;
+logic                                 writedata_en;
 logic                                 storage_burst_en;
 
 logic                                 in_process;
 
 logic                                 wr_unit_stb;
+logic                                 start_allowed;
 logic                                 start_stb;
 
 logic                                 last_transaction;
+logic                                 last_transaction_stb;
 logic                                 storage_valid;
 
 cmp_struct_t                          storage_struct;
@@ -99,7 +101,7 @@ generate
             storage_struct.trans_type <= trans_type_i;
             storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
-            storage_struct.end_off    <= trans_addr_i[ADDR_B_W - 1 :        0] + burstcount;
+            storage_struct.end_off    <= ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount );
           end
 
       always_ff @( posedge clk_i )
@@ -114,9 +116,9 @@ generate
             burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
         else
           if( storage_burst_en )
-            burstcount_exp = AMM_BURST_W'( 1 );
+            burstcount_exp = (AMM_BURST_W - 1)'( 1 );
           else
-            burstcount_exp = AMM_BURST_W'( 0 );
+            burstcount_exp = (AMM_BURST_W - 1)'( 0 );
 
       always_ff @( posedge clk_i )
         if( start_stb )
@@ -162,7 +164,7 @@ generate
               byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !storage_burst_en ),  storage_struct.end_off  );
           else
             if( !last_transaction )
-              byteenable_o   <= byteenable_ptrn( 1'b0, cur_struct.start_off,      ( last_transaction  ),  cur_struct.end_off      );
+              byteenable_o <= byteenable_ptrn( 1'b0, cur_struct.start_off,      ( last_transaction  ),  cur_struct.end_off      );
 
     end
   else
