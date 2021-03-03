@@ -8,7 +8,7 @@ function automatic void set_dist_parameters(
   input int seed        = 1,
   input int depth       = 4
 );
-  this.right_edge = right_edge - 1;
+  this.right_edge = right_edge;
   this.seed       = seed;
   this.depth      = depth;
 endfunction : set_dist_parameters

@@ -1,7 +1,15 @@
+`include "./bathtube_distribution.sv"
+
 import tb_settings_pkg::*;
 import rtl_settings_pkg::*;
 
 class random_scenario();
+
+bathtube_distribution   bath_dist_obj;
+
+localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) - 1 );
+localparam int MAX_BURST_BYTE_VAL = ( ADDR_TYPE == "BYTE" ) ? ( MAX_BURST_VAL            ):
+                                                              ( MAX_BURST_VAL * DATA_B_W );
 
 int read_only_mode;
 int write_only_mode;
@@ -22,7 +30,8 @@ rand  bit                       data_mode;
 rand  bit   [9  : 0]            burstcount;
 
 rand  bit                       err_enable;
-      bit   [15 : 0]            err_trans_num;
+rand  bit   [15 : 0]            err_trans_num;
+      int                       err_byte_num;
 
 rand  bit   [ADDR_W - 1 : 0]    addr_ptrn;
 rand  bit   [7  : 0]            data_ptrn;
@@ -30,7 +39,8 @@ rand  bit   [7  : 0]            data_ptrn;
 test_param_t  test_param;
 
 constraint base_constraints {
-  burst_count <= ( 2**( AMM_BURST_W - 1 ) - 1 );
+  burst_count   <= MAX_BURST_VAL;
+  err_trans_num <= trans_amount;
 }
 
 constraint test_mode_constraint {
@@ -95,5 +105,13 @@ function automatic void prep_test_param();
   test_param[CSR_SET_ADDR]    = addr_ptrn;
   test_param[CSR_SET_DATA]    = data_ptrn;
 endfunction : prep_test_param
+
+function automatic void post_randomize();
+  bath_dist_obj = new();
+  bath_dist_obj.set_dist_parameters( MAX_BURST_VAL );
+  bath_dist_obj.randomize();
+  err_byte_num  = bath_dist_obj.value;
+  bath_dist_obj = null;
+endfunction : post_randomize
 
 endclass : random_scenario

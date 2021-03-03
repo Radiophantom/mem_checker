@@ -1,5 +1,3 @@
-`include "./bathtube_distribution.sv"
-
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
@@ -8,7 +6,9 @@ class amm_slave_memory();
 bit [7 : 0] memory_array [*];
 bit [7 : 0] rd_data [$];
 
-bathtube_distribution   bath_dist_obj;
+event test_started;
+event test_finished;
+
 random_scenario         rnd_scen_obj;
 
 test_result_t     test_result;
@@ -88,24 +88,22 @@ local function automatic int start_offset(
       return i;
 endfunction : start_offset
 
-local function automatic void scan_err_trans_mbx(); // may be should be task - not function to synthesis
-  fork
-    forever
-      begin
-        wait( test_started.triggered );
-        gen2mem_mbx.get( rnd_scen_obj );
-        insert_error   = rnd_scen_obj.err_enable;
-        err_trans_num = rnd_scen_obj.err_trans_num;
-        cur_trans_num = 0;
-        wait( test_finished.triggered );
-        mem2scoreb_mbx.put( test_result );
-      end
-endfunction : scan_err_trans_mbx
+local task automatic void scan_test_mbx();
+  forever
+    begin
+      wait( test_started.triggered );
+      gen2mem_mbx.get( rnd_scen_obj );
+      insert_error  = rnd_scen_obj.err_enable;
+      err_trans_num = rnd_scen_obj.err_trans_num;
+      cur_trans_num = 0;
+      wait( test_finished.triggered );
+      mem2scoreb_mbx.put( test_result );
+    end
+endtask : scan_test_mbx
 
 local function automatic void corrupt_data(
   ref bit [7 : 0] wr_data [$]
 );
-  bath_dist_obj.set_dist_parameters( wr_data.size() );
   test_result[CSR_ERR_ADDR] = bath_dist_obj.value;
   test_result[CSR_ERR_DATA] = wr_data[bath_dist_obj.value];
   wr_data[bath_dist_obj.value]  = ( !wr_data[bath_dist_obj.value] );
@@ -214,7 +212,6 @@ endtask
 
 local task automatic run();
 
-  bath_dist_obj = new();
   scan_err_transaction();
 
   forever

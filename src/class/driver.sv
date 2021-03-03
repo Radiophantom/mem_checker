@@ -1,7 +1,7 @@
 `include "../interface/amm_if.sv"
 
-import tb_settings_pkg::*;
 import rtl_settings_pkg::*;
+import tb_settings_pkg::*;
 
 class driver();
 
@@ -69,7 +69,7 @@ endtask : rd_word
 
 local task automatic poll_finish_bit();
   do
-    rd_word( 4 );
+    rd_word( CSR_TEST_FINISH );
   while( rd_data == 0 );
 endtask : poll_finish_bit
 
@@ -77,11 +77,11 @@ local task automatic start_test();
   wr_word( CSR_TEST_PARAM,  rnd_scen_obj.test_param[CSR_TEST_PARAM] );
   wr_word( CSR_SET_ADDR,    rnd_scen_obj.test_param[CSR_SET_ADDR]   );
   wr_word( CSR_SET_DATA,    rnd_scen_obj.test_param[CSR_SET_DATA]   );
-  wr_word( 0,               32'd1                                   );
+  wr_word( CSR_TEST_START,  32'd1                                   );
 endtask : start_test
 
 local task automatic save_test_result();
-  for( int i = 5; i < 15; i++ )
+  for( int i = CSR_TEST_RESULT; i < CSR_RD_REQ; i++ )
     begin
       rd_word( i );
       test_result[i] = rd_data;
@@ -95,8 +95,8 @@ task automatic run();
       start_test();
       -> test_started;
       poll_finish_bit();
-      save_test_result();
       -> test_finished;
+      save_test_result();
       driv2scoreb.put( test_result );
     end
 endtask : run
