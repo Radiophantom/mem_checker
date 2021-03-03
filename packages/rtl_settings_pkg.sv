@@ -96,20 +96,20 @@ function automatic logic [DATA_B_W - 1 : 0] check_vector(
       check_vector[i] = 1'b0;
 endfunction : check_vector
 
-function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
-  logic [DATA_B_W - 1 : 0] check_vector
+function automatic int err_byte_find(
+  logic [127 : 0] check_vector
 );
-  for( int i = 0; i < DATA_B_W; i++ )
+  for( int i = 0; i < 128; i++ )
     if( check_vector[i] )
       return( i );
   return( 0 );
 endfunction : err_byte_find
 
 function automatic int bytes_count(
-  logic [15 : 0] byteenable
+  logic [127 : 0] byteenable
 );
   bytes_count = 0;
-  for( int i = 0; i < 16; i++ )
+  for( int i = 0; i < 128; i++ )
     if( byteenable[i] )
       bytes_count++;
 endfunction : bytes_count

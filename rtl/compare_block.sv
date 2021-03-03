@@ -65,6 +65,8 @@ logic   [CMP_W - 1      : 0]                    cmp_fifo_q;
 
 logic   [ADDR_CNT_W - 1 : 0]                    check_addr_cnt;
 
+logic   [DATA_B_W - 1 : 0]                      err_byte_flag;
+logic   [DATA_B_W - 1 : 0][3 : 0]               err_byte_num_arr;
 logic   [ADDR_B_W - 1 : 0]                      err_byte_num;
 logic   [7 : 0]                                 err_byte;
 
@@ -253,13 +255,25 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( pipe_stage_en[1] )
-    err_byte_num = err_byte_find( check_vector_result );
+    for( int i = 0; i < DATA_B_W / 16; i++ )
+      begin
+        err_byte_flag   [i] <= ( |check_vector_result[15 + i * 16 -: 16] );
+        err_byte_num_arr[i] <= 4'( err_byte_find( check_vector_result[15 + i * 16 -: 16] ) );
+      end
 
 always_ff @( posedge clk_i )
   if( pipe_stage_en[1] )
     check_error <= ( &check_vector_result );
   else
     check_error <= 1'b0;
+
+always_comb
+  for( int i = 0; i < DATA_B_W / 16; i++ )
+    begin
+      err_byte_num = 0;
+      if( err_byte_flag[i] )
+        err_byte_num = err_byte_num_arr[i];
+    end
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
@@ -289,7 +303,7 @@ always_ff @( posedge clk_i, posedge rst_i )
 assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
 assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
 
-assign err_byte         = check_readdata[1][err_byte_num];
+assign err_byte         = check_readdata[1][err_byte_num_arr];
 assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
 
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
