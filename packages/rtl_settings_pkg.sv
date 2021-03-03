@@ -105,12 +105,13 @@ function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
   return( 0 );
 endfunction : err_byte_find
 
-function automatic logic [ADDR_B_W : 0] bytes_count_func(
-  logic [DATA_B_W - 1 : 0] byteenable
+function automatic int bytes_count(
+  logic [15 : 0] byteenable
 );
-  for( int i = 0; i < DATA_B_W; i++ )
+  bytes_count = 0;
+  for( int i = 0; i < 16; i++ )
     if( byteenable[i] )
-      bytes_count_func++;
-endfunction : bytes_count_func
+      bytes_count++;
+endfunction : bytes_count
 
 endpackage : rtl_settings_pkg

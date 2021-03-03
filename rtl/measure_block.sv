@@ -11,7 +11,7 @@ module measure_block(
   input                                               read_i,
   input                                               write_i,
   input         [AMM_BURST_W - 1 : 0]                 burstcount_i,
-  input         [DATA_B_W - 1 : 0]                    byteenable_i,
+  input         [DATA_B_W - 1    : 0]                 byteenable_i,
 
   // CSR block interface
   input                                               test_start_i,
@@ -29,7 +29,6 @@ logic                 rd_req_stb;
 logic                 wr_unit_stb;
 logic                 last_rd_word_stb;
 logic [1 : 0]         save_delay_stb;
-logic [1 : 0]         wr_stb_delayed;
 
 logic [CNT_W - 1 : 0] load_cnt_num;
 logic [CNT_W - 1 : 0] active_cnt_num;
@@ -46,14 +45,7 @@ logic [15 : 0]        cmp_delay;
 logic [15 : 0]        min_delay;
 logic [15 : 0]        max_delay;
 
-function automatic logic [ADDR_B_W : 0] bytes_count_func(
-  logic [DATA_B_W/2 - 1 : 0] byteenable
-);
-  bytes_count_func = (ADDR_B_W + 1)'( 0 );
-  for( int i = 0; i < DATA_B_W/2; i++ )
-    if( byteenable[i] )
-      bytes_count_func++;
-endfunction : bytes_count_func
+logic                 write_busy, read_busy;
 
 logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
 logic [CNT_NUM - 1 : 0]                       delay_cnt_reg;
@@ -64,7 +56,10 @@ always_ff @( posedge clk_i, posedge rst_i )
     rd_req_flag <= 1'b0;
   else
     if( read_i )
-      rd_req_flag <= waitrequest_i;
+      if( waitrequest_i )
+        rd_req_flag <= 1'b1;
+      else
+        rd_req_flag <= 1'b0;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -77,7 +72,7 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     active_cnt_num <= CNT_W'( 0 );
   else
-    if( ( word_cnt_array[active_cnt_num] == 1 ) && readdatavalid_i )
+    if( last_word && readdatavalid_i )
       active_cnt_num <= active_cnt_num + 1'b1;
 
 always_ff @( posedge clk_i )
@@ -95,8 +90,6 @@ always_ff @( posedge clk_i )
     else
       if( readdatavalid_i && ( active_cnt_num == i ) )
         delay_cnt_reg[i] <= 1'b0;
-
-logic read_busy;
 
 always_ff @( posedge clk_i )
   if( ( word_cnt_array[active_cnt_num] == 0 ) && ( delay_cnt_reg[active_cnt_num] == 1'b0 ) )
@@ -166,7 +159,99 @@ always_ff @( posedge clk_i )
     if( save_delay_stb[1] )
       sum_delay <= sum_delay + cmp_delay;
 
-assign meas_busy_o = ( !read_busy ) && ( !wr_stb_delayed );
+generate
+  if( ADDR_TYPE == "BYTE" )
+    begin : byte_address
+      //----------------------------------------------------------------------------------
+      localparam int INPUTS_AMOUNT  = ( DATA_B_W > 16 ) ? ( DATA_B_W / 16 ) : ( 1 );
+
+      if( INPUTS_AMOUNT > 1 )
+        begin
+          //----------------------------------------------------------------------------------
+          localparam int STAGE_W        = $clog2( 16 ) + 1;
+          localparam int STAGES_AMOUNT  = $clog2( INPUTS_AMOUNT );
+          localparam int SUM_W          = $clog2( STAGES_AMOUNT ) + STAGE_W;
+
+          logic [STAGES_AMOUNT - 1 : 0][INPUTS_AMOUNT - 1 : 0][SUM_W - 1   : 0] bytes_amount_sum;
+          logic                        [INPUTS_AMOUNT - 1 : 0][STAGE_W - 1 : 0] bytes_amount;
+
+          logic [STAGES_AMOUNT - 1 : 0] wr_stb_delayed;
+
+          always_ff @( posedge clk_i )
+            if( wr_unit_stb )
+              for( int i = 0; i < INPUTS_AMOUNT; i++ ) 
+                bytes_amount[i] <= STAGE_W'( bytes_count( byteenable_i[15 + i * 16 -: 16] ) );
+
+          always_ff @( posedge clk_i )
+            begin
+              for( int j = 0; j < INPUTS_AMOUNT / 2; j++ )
+                bytes_amount_sum[0][j] <= bytes_amount[j * 2] + bytes_amount[j * 2 + 1];
+              for( int i = 1; i < STAGES_AMOUNT; i++ )
+                for( int j = 0; j < INPUTS_AMOUNT / (i * 2); j++ )
+                  bytes_amount_sum[i][j] <= bytes_amount_sum[i - 1][j * 2] + bytes_amount_sum[i - 1][j * 2 + 1];
+            end
+
+          always_ff @( posedge clk_i, posedge rst_i )
+            if( rst_i )
+              wr_stb_delayed <= STAGES_AMOUNT'( 0 );
+            else
+              wr_stb_delayed <= { wr_stb_delayed[STAGES_AMOUNT - 2 : 0], wr_unit_stb };
+
+          always_ff @( posedge clk_i )
+            if( test_start_i )
+              wr_units <= 32'( 0 );
+            else
+              if( wr_stb_delayed[STAGES_AMOUNT - 1] )
+                wr_units <= wr_units + bytes_amount_sum[STAGES_AMOUNT - 1][0];
+
+          assign write_busy = ( |wr_stb_delayed );
+          //----------------------------------------------------------------------------------
+        end
+      else
+        begin
+          //----------------------------------------------------------------------------------
+          localparam int SUM_W = $clog( DATA_B_W ) + 1;
+
+          logic [SUM_W - 1 : 0] bytes_amount;
+          logic                 wr_stb_delayed;
+
+          always_ff @( posedge clk_i )
+            if( wr_unit_stb )
+              bytes_amount <= SUM_W'( bytes_count( byteenable_i ) );
+
+          always_ff @( posedge clk_i, posedge rst_i )
+            if( rst_i )
+              wr_stb_delayed <= 1'b0;
+            else
+              wr_stb_delayed <= wr_unit_stb;
+
+          always_ff @( posedge clk_i )
+            if( test_start_i )
+              wr_units <= 32'( 0 );
+            else
+              if( wr_stb_delayed )
+                wr_units <= wr_units + bytes_amount;
+
+          assign write_busy = wr_stb_delayed;
+          //----------------------------------------------------------------------------------
+        end
+      //----------------------------------------------------------------------------------
+    end
+  else
+    if( ADDR_TYPE == "WORD" )
+      begin : word_address
+        //----------------------------------------------------------------------------------
+        always_ff @( posedge clk_i )
+          if( test_start_i )
+            wr_units <= 32'( 0 );
+          else
+            if( wr_unit_stb )
+              wr_units <= wr_units + 1'b1;
+
+        assign write_busy = 1'b0;
+        //----------------------------------------------------------------------------------
+      end
+endgenerate 
 
 always_ff @( posedge clk_i )
   if( test_start_i )
@@ -175,58 +260,19 @@ always_ff @( posedge clk_i )
     if( write_i )
       wr_ticks <= wr_ticks + 1'b1;
 
-generate
-  if( ADDR_TYPE == "BYTE" )
-    begin : byte_address
 
-      logic [2 : 0][(ADDR_B_W-1)/2+1 : 0] bytes_amount;
 
-      always_ff @( posedge clk_i )
-        if( wr_unit_stb )
-          begin
-            bytes_amount[0] <= bytes_count_func( byteenable_i[63 : 32] );
-            bytes_amount[1] <= bytes_count_func( byteenable_i[31 : 0] );
-          end
 
-      always_ff @( posedge clk_i )
-        if( wr_stb_delayed[0] )
-          bytes_amount[2] <= bytes_amount[0] + bytes_amount[1];
 
-      always_ff @( posedge clk_i, posedge rst_i )
-        if( rst_i )
-          wr_stb_delayed <= 1'b0;
-        else
-          wr_stb_delayed <= { wr_stb_delayed[0], wr_unit_stb };
+logic   last_word;
+logic   last_word_stb;
 
-      always_ff @( posedge clk_i )
-        if( test_start_i )
-          wr_units <= 32'( 0 );
-        else
-          if( wr_stb_delayed[1] )
-            wr_units <= wr_units + bytes_amount[2];
-    end
-  else
-    if( ADDR_TYPE == "WORD" )
-      begin : word_address
-
-        always_ff @( posedge clk_i )
-          if( test_start_i )
-            wr_units <= 32'( 0 );
-          else
-            if( wr_unit_stb )
-              wr_units <= wr_units + 1'b1;
-
-      end
-endgenerate 
-
-logic last_rd_word;
+assign last_word      = ( word_cnt_array[active_cnt_num] == 1 );
+assign last_word_stb  = ( last_word && readdatavalid_i );
 
 assign rd_req_stb       = ( read_i  && ( !rd_req_flag   ) );
 assign wr_unit_stb      = ( write_i && ( !waitrequest_i ) );
 
-assign last_rd_word     = ( delay_cnt_array[active_cnt_num] == 1 );
-
-assign last_rd_word_stb = ( last_rd_word && readdatavalid_i );
 
 assign meas_result_o[CSR_WR_TICKS   ] = wr_ticks;
 assign meas_result_o[CSR_WR_UNITS   ] = wr_units;
@@ -235,5 +281,7 @@ assign meas_result_o[CSR_RD_WORDS   ] = rd_words;
 assign meas_result_o[CSR_MIN_MAX_DEL] = { min_delay, max_delay };
 assign meas_result_o[CSR_SUM_DEL    ] = sum_delay;
 assign meas_result_o[CSR_RD_REQ     ] = rd_req_amount;
+
+assign meas_busy_o = ( !read_busy ) && ( !write_busy );
 
 endmodule : measure_block
