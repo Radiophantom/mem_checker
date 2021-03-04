@@ -10,14 +10,12 @@ virtual amm_if #(
   .DATA_W   ( 32  )
 ) amm_if_v;
 
-mailbox       gen2driv;
-mailbox       driv2scoreb;
+mailbox   gen2driv;
+mailbox   driv2scb_test_mbx;
+mailbox   driv2scb_stat_mbx;
 
 random_scenario   rnd_scen_obj;
-
-test_result_t     test_result;
-
-bit [31 : 0]  rd_data;
+statistics        stat_obj;
 
 function new(
   virtual amm_if #(
@@ -25,15 +23,17 @@ function new(
     .DATA_W   ( 32  )
   ) amm_if_v,
   mailbox gen2driv,
-  mailbox driv2scoreb,
+  mailbox driv2scb_test_mbx,
+  mailbox driv2scb_stat_mbx,
   event   test_started,
   event   test_finished
 );
-  this.amm_if_v       = amm_if_v;
-  this.gen2driv       = gen2driv;
-  this.driv2scoreb    = driv2scoreb;
-  this.test_started   = test_started;
-  this.test_finished  = test_finished;
+  this.amm_if_v           = amm_if_v;
+  this.gen2driv           = gen2driv;
+  this.driv2scb_test_mbx  = driv2scb_test_mbx;
+  this.driv2scb_stat_mbx  = driv2scb_stat_mbx;
+  this.test_started       = test_started;
+  this.test_finished      = test_finished;
   init_interface();
 endfunction
 
@@ -57,7 +57,8 @@ local task automatic wr_word(
 endtask : wr_word
 
 local task automatic rd_word(
-  int rd_addr
+  input  int            rd_addr,
+  output logic [31 : 0] rd_data
 );
   amm_if_v.address  <= rd_addr;
   amm_if_v.read     <= 1'b1;
@@ -68,23 +69,30 @@ local task automatic rd_word(
 endtask : rd_word
 
 local task automatic poll_finish_bit();
+  bit [31 : 0] rd_data;
   do
-    rd_word( CSR_TEST_FINISH );
+    rd_word( CSR_TEST_FINISH, rd_data );
   while( rd_data == 0 );
 endtask : poll_finish_bit
 
 local task automatic start_test();
-  wr_word( CSR_TEST_PARAM,  rnd_scen_obj.test_param[CSR_TEST_PARAM] );
-  wr_word( CSR_SET_ADDR,    rnd_scen_obj.test_param[CSR_SET_ADDR]   );
-  wr_word( CSR_SET_DATA,    rnd_scen_obj.test_param[CSR_SET_DATA]   );
-  wr_word( CSR_TEST_START,  32'd1                                   );
+  wr_word( CSR_TEST_PARAM,  rnd_scen_obj.test_param_registers[CSR_TEST_PARAM] );
+  wr_word( CSR_SET_ADDR,    rnd_scen_obj.test_param_registers[CSR_SET_ADDR]   );
+  wr_word( CSR_SET_DATA,    rnd_scen_obj.test_param_registers[CSR_SET_DATA]   );
+  wr_word( CSR_TEST_START,  32'd1                                             );
 endtask : start_test
 
 local task automatic save_test_result();
-  for( int i = CSR_TEST_RESULT; i < CSR_RD_REQ; i++ )
+
+  stat_obj = new();
+
+  for( int i = CSR_TEST_RESULT; i <= CSR_ERR_DATA; i++ )
     begin
-      rd_word( i );
-      test_result[i] = rd_data;
+      rd_word( i, rnd_scen_obj.test_result_registers[i] );
+    end
+  for( int i = CSR_WR_TICKS; i <= CSR_RD_REQ; i++ )
+    begin
+      rd_word( i, stat_obj.stat_registers[i] );
     end
 endtask : save_test_result
 
@@ -97,7 +105,8 @@ task automatic run();
       poll_finish_bit();
       -> test_finished;
       save_test_result();
-      driv2scoreb.put( test_result );
+      driv2scb_test_mbx.put( rnd_scen_obj );
+      driv2scb_stat_mbx.put( stat_obj     );
     end
 endtask : run
 
