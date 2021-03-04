@@ -1,20 +1,21 @@
 package rtl_settings_pkg;
 
-parameter int     MEM_ADDR_W  = 32;
-parameter int     MEM_DATA_W  = 8;
-parameter int     AMM_ADDR_W  = 32;
-parameter int     AMM_DATA_W  = 512;
-parameter int     AMM_BURST_W = 11;
+parameter int     MEM_ADDR_W    = 32;
+parameter int     MEM_DATA_W    = 8;
+parameter int     MEM_DATA_B_W  = ( MEM_DATA_W / 8 );
+parameter int     AMM_ADDR_W    = 32;
+parameter int     AMM_DATA_W    = 512;
+parameter int     AMM_BURST_W   = 11;
 
-parameter int     DATA_B_W    = ( AMM_DATA_W / 8 );
-parameter int     ADDR_B_W    = $clog2( DATA_B_W );
+parameter int     DATA_B_W      = ( AMM_DATA_W / 8 );
+parameter int     ADDR_B_W      = $clog2( DATA_B_W );
 
-parameter string  ADDR_TYPE   = "BYTE"; // "BYTE" or "WORD"
+parameter string  ADDR_TYPE     = "BYTE"; // "BYTE" or "WORD"
 
-parameter int     ADDR_W      = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
+parameter int     ADDR_W        = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
                                                           ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W ) );
 
-parameter int     CMP_ADDR_W  = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
+parameter int     CMP_ADDR_W    = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
                                                           ( ADDR_W            );
 
 parameter int CSR_TEST_START  = 0;
