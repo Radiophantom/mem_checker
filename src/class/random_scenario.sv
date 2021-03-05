@@ -7,10 +7,10 @@ class random_scenario();
 
 bathtube_distribution   bath_dist_obj;
 
-localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) - 1 );
+localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) );
 
-localparam int MAX_BURST_BYTE_VAL = ( ADDR_TYPE == "BYTE" ) ? ( MAX_BURST_VAL            ):
-                                                              ( MAX_BURST_VAL * DATA_B_W );
+localparam int MAX_BURST_BYTE_VAL = ( ADDR_TYPE == "BYTE" ) ? ( MAX_BURST_VAL            - 1 ):
+                                                              ( MAX_BURST_VAL * DATA_B_W - 1 );
 
 int read_only_mode;
 int write_only_mode;
@@ -71,12 +71,7 @@ constraint error_enable_constraint {
       };
     end
   else
-    begin
-      error_enable = 0;
-     // dist {
-     //   0 := 100
-     // };
-    end
+    error_enable = 0;
 }
 
 bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
@@ -114,8 +109,8 @@ endfunction
 
 function automatic void prep_test_param();
   test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
-  test_param_registers[CSR_SET_ADDR]    = addr_ptrn;
-  test_param_registers[CSR_SET_DATA]    = data_ptrn;
+  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
+  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
 endfunction : prep_test_param
 
 function automatic void post_randomize();

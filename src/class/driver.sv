@@ -38,11 +38,12 @@ function new(
 endfunction
 
 local function automatic void init_interface();
-  amm_if_v.read       = 1'b0;
-  amm_if_v.write      = 1'b0;
-  amm_if_v.address    = '0;
-  amm_if_v.writedata  = '0;
-  amm_if_v.readdata   = '0;
+  amm_if_v.read           = 1'b0;
+  amm_if_v.write          = 1'b0;
+  amm_if_v.readdatavalid  = 1'b0;
+  amm_if_v.address        = '0;
+  amm_if_v.writedata      = '0;
+  amm_if_v.readdata       = '0;
 endfunction : init_interface
 
 local task automatic wr_word(
@@ -57,14 +58,17 @@ local task automatic wr_word(
 endtask : wr_word
 
 local task automatic rd_word(
-  input  int            rd_addr,
-  output logic [31 : 0] rd_data
+  input  int          rd_addr,
+  output bit [31 : 0] rd_data
 );
   amm_if_v.address  <= rd_addr;
   amm_if_v.read     <= 1'b1;
   @( posedge amm_if_v.clk );
   amm_if_v.read     <= 1'b0;
   @( posedge amm_if_v.clk );
+  do
+    @( posedge amm_if_v.clk );
+  while( !amm_if_v.readdatavalid );
   rd_data = amm_if_v.readdata;
 endtask : rd_word
 
@@ -77,13 +81,12 @@ endtask : poll_finish_bit
 
 local task automatic start_test();
   wr_word( CSR_TEST_PARAM,  rnd_scen_obj.test_param_registers[CSR_TEST_PARAM] );
-  wr_word( CSR_SET_ADDR,    rnd_scen_obj.test_param_registers[CSR_SET_ADDR]   );
-  wr_word( CSR_SET_DATA,    rnd_scen_obj.test_param_registers[CSR_SET_DATA]   );
+  wr_word( CSR_SET_ADDR,    rnd_scen_obj.test_param_registers[CSR_SET_ADDR  ] );
+  wr_word( CSR_SET_DATA,    rnd_scen_obj.test_param_registers[CSR_SET_DATA  ] );
   wr_word( CSR_TEST_START,  32'd1                                             );
 endtask : start_test
 
 local task automatic save_test_result();
-
   stat_obj = new();
 
   for( int i = CSR_TEST_RESULT; i <= CSR_ERR_DATA; i++ )

@@ -1,15 +1,16 @@
-class bathtube_distribution;
+class bathtube_distribution();
+
+static int seed = 0;
 
 int value;
-int right_edge, seed, depth;
+int right_edge;
+int depth;
 
 function automatic void set_dist_parameters(
   input int right_edge  = 1,
-  input int seed        = 1,
   input int depth       = 4
 );
   this.right_edge = right_edge;
-  this.seed       = seed;
   this.depth      = depth;
 endfunction : set_dist_parameters
 
