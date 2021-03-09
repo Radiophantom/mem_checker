@@ -12,6 +12,7 @@ module mem_checker(
   input         [3  : 0]              sys_address_i,
   input         [31 : 0]              sys_writedata_i,
 
+  output  logic                       sys_readdatavalid_o,
   output  logic [31 : 0]              sys_readdata_o,
   
   // Avalon-MM output interface
@@ -58,6 +59,7 @@ csr_block csr_block_inst(
   .write_i          ( sys_write_i                                   ),
   .address_i        ( sys_address_i                                 ),
   .writedata_i      ( sys_writedata_i                               ),
+  .readdatavalid_o  ( sys_readdatavalid_o                           ),
   .readdata_o       ( sys_readdata_o                                ),
 
   .test_finished_i  ( test_finish                                   ),

@@ -83,5 +83,3 @@ function automatic void run();
 endfunction : run
 
 endclass : scoreboard
-
-

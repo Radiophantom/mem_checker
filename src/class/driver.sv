@@ -10,7 +10,7 @@ virtual amm_if #(
   .DATA_W   ( 32  )
 ) amm_if_v;
 
-mailbox   gen2driv;
+mailbox   gen2driv_mbx;
 mailbox   driv2scb_test_mbx;
 mailbox   driv2scb_stat_mbx;
 
@@ -22,14 +22,14 @@ function new(
     .ADDR_W   ( 4   ),
     .DATA_W   ( 32  )
   ) amm_if_v,
-  mailbox gen2driv,
+  mailbox gen2driv_mbx,
   mailbox driv2scb_test_mbx,
   mailbox driv2scb_stat_mbx,
   event   test_started,
   event   test_finished
 );
   this.amm_if_v           = amm_if_v;
-  this.gen2driv           = gen2driv;
+  this.gen2driv_mbx       = gen2driv_mbx;
   this.driv2scb_test_mbx  = driv2scb_test_mbx;
   this.driv2scb_stat_mbx  = driv2scb_stat_mbx;
   this.test_started       = test_started;
@@ -102,7 +102,7 @@ endtask : save_test_result
 task automatic run();
   forever
     begin
-      gen2driv.get( rnd_scen_obj );
+      gen2driv_mbx.get( rnd_scen_obj );
       start_test();
       -> test_started;
       poll_finish_bit();

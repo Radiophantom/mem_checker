@@ -274,12 +274,13 @@ assign last_word_stb  = ( last_word && readdatavalid_i  );
 
 assign meas_busy_o    = ( !read_busy ) && ( !write_busy );
 
-assign meas_result_o[CSR_WR_TICKS   ] = wr_ticks;
-assign meas_result_o[CSR_WR_UNITS   ] = wr_units;
-assign meas_result_o[CSR_RD_TICKS   ] = rd_ticks;
-assign meas_result_o[CSR_RD_WORDS   ] = rd_words;
-assign meas_result_o[CSR_MIN_MAX_DEL] = { min_delay, max_delay };
-assign meas_result_o[CSR_SUM_DEL    ] = sum_delay;
-assign meas_result_o[CSR_RD_REQ     ] = rd_req_amount;
+assign meas_result_o[CSR_WR_TICKS ] = wr_ticks;
+assign meas_result_o[CSR_WR_UNITS ] = wr_units;
+assign meas_result_o[CSR_RD_TICKS ] = rd_ticks;
+assign meas_result_o[CSR_RD_WORDS ] = rd_words;
+assign meas_result_o[CSR_MIN_DEL  ] = min_delay;
+assign meas_result_o[CSR_MAX_DEL  ] = max_delay;
+assign meas_result_o[CSR_SUM_DEL  ] = sum_delay;
+assign meas_result_o[CSR_RD_REQ   ] = rd_req_amount;
 
 endmodule : measure_block

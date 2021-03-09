@@ -1,5 +1,5 @@
-import rtl_settings_pkg.sv::*;
-import tb_settings_pkg.sv::*;
+import rtl_settings_pkg::*;
+import tb_settings_pkg::*;
 
 class monitor();
 
@@ -64,6 +64,8 @@ local function automatic void reset_stat();
   max_delay      = 0;
   sum_delay      = 0;
   rd_req_amount  = 0;
+  cur_trans_id    = 0;
+  next_trans_id   = 0;
 endfunction : reset_variables
 
 local task automatic wr_ticks_count();
@@ -98,65 +100,61 @@ local task automatic rd_words_count();
     begin
       @( posedge amm_if_v.clk );
       if( amm_if_v.readdatavalid )
-        rd_words++;
+        begin
+          rd_words++;
+          words_amount_left--;
+        end
     end
 endtask : rd_words_count
 
 local task automatic rd_req_count();
-  fork
-    forever
-      begin
-        @( posedge amm_if_v.clk );
-        if( amm_if_v.read )
-          begin
+  forever
+    begin
+      @( posedge amm_if_v.clk );
+      if( amm_if_v.read )
+        begin
+          fork
             delay_count( next_trans_id );
-            words_amount_left += amm_if_v.burstcount;
-            next_trans_id++;
-            rd_req_amount++;
-            wait( !amm_if_v.waitrequest );
-          end 
-      end
-    forever
-      begin
-        @( posedge amm_if_v.clk );
-        if( amm_if_v.readdatavalid )
-          words_amount_left--;
-      end
-  join_none
+          join_none
+          words_amount_left += amm_if_v.burstcount;
+          next_trans_id++;
+          rd_req_amount++;
+          wait( !amm_if_v.waitrequest );
+        end 
+    end
 endtask : rd_req_count
 
 local task automatic delay_count( int trans_id );
-  int delay_cnt     = 0;
   int words_amount  = amm_if_v.burstcount;
+  int delay_cnt     = 0;
+  int count_enable  = 1;
 
-  fork : delay_process
-    forever
+  fork
+    while( count_enable )
       begin
         @( posedge amm_if_v.clk );
         delay_cnt++;
       end
-    forever
-      begin
-        @( posedge amm_if_v.clk );
-        
-      while( 
-      wait( trans_id == cur_trans_id );
-      do
-      while( amm_if_v.readdatavalid );
-  join_any
+  join_none
 
-  disable delay_process;
+  while( words_amount )
+    begin
+      @( posedge amm_if_v.clk );
+      if( trans_id == cur_trans_id )
+        if( amm_if_v.readdatavalid )
+          begin
+            words_amount--;
+            count_enable = 0;
+          end
+    end
+
+  cur_trans_id++;
 
   if( delay_cnt < min_delay )
     min_delay = delay_cnt;
   if( delay_cnt > max_delay )
     max_delay = delay_cnt;
   sum_delay += delay_cnt;
-
-  fork
-    words_amount--;
-
-  join_none
 endtask : delay_count
   
 local task automatic rd_ticks_count();
@@ -168,12 +166,24 @@ local task automatic rd_ticks_count();
     end
 endtask : rd_ticks
 
+local function automatic void save_stat();
+  stat_obj.stat_registers[CSR_WR_TICKS] = wr_ticks;
+  stat_obj.stat_registers[CSR_WR_UNITS] = wr_units;
+  stat_obj.stat_registers[CSR_RD_TICKS] = rd_ticks;
+  stat_obj.stat_registers[CSR_RD_WORDS] = rd_words;
+  stat_obj.stat_registers[CSR_MIN_DEL ] = min_delay;
+  stat_obj.stat_registers[CSR_MAX_DEL ] = max_delay;
+  stat_obj.stat_registers[CSR_SUM_DEL ] = sum_delay;
+  stat_obj.stat_registers[CSR_RD_REQ  ] = rd_req_amount;
+endfunction : save_stat
+
 task automatic run();
   fork
-    rd_bytes_count();
-    wr_bytes_count();
     wr_ticks_count();
-    rd_req_count();
+    wr_units_count();
+    rd_ticks_count();
+    rd_words_count();
+    rd_req_count  ();
   join_none
 
   fork
@@ -181,7 +191,7 @@ task automatic run();
       begin
         @( test_finished );
         stat_obj = new();
-        save_stat();
+        save_stat ();
         reset_stat();
         mon2scb_mbx.put( stat_obj );
       end

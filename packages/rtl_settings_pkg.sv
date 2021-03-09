@@ -30,9 +30,10 @@ parameter int CSR_WR_TICKS    = 8;
 parameter int CSR_WR_UNITS    = 9;
 parameter int CSR_RD_TICKS    = 10;
 parameter int CSR_RD_WORDS    = 11;
-parameter int CSR_MIN_MAX_DEL = 12;
-parameter int CSR_SUM_DEL     = 13;
-parameter int CSR_RD_REQ      = 14;
+parameter int CSR_MIN_DEL     = 12;
+parameter int CSR_MAX_DEL     = 13;
+parameter int CSR_SUM_DEL     = 14;
+parameter int CSR_RD_REQ      = 15;
 
 typedef enum logic [1:0] {
   READ_ONLY       = 2'b01,

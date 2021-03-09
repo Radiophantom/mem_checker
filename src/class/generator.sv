@@ -15,8 +15,6 @@ function new(
   this.gen2mem_mbx  = gen2mem_mbx;
 endfunction
 
-int test_amount = 3500;
-
 task automatic void run();
   repeat( 500 )
     begin
