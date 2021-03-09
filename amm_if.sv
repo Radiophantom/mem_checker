@@ -6,15 +6,27 @@ interface amm_if#(
   input clk
 );
 
+logic [ADDR_W - 1 : 0]      address;
 logic                       read;
 logic                       write;
-logic                       readdatavalid;
-logic                       waitrequest;
-logic [ADDR_W - 1     : 0]  address;
-logic [DATA_W - 1     : 0]  writedata;
-logic [DATA_W - 1     : 0]  readdata;
-logic [BURST_W - 1    : 0]  burstcount;
 logic [DATA_W / 8 - 1 : 0]  byteenable;
+logic [BURST_W - 1 : 0]     burstcount;
+logic                       readdatavalid;
+logic [DATA_W - 1 : 0]      writedata;
+logic [DATA_W - 1 : 0]      readdata;
+logic                       waitrequest;
+
+modport master(
+  output address,
+  output read,
+  output write,
+  output writedata,
+  output byteenable,
+  output burstcount,
+  input  readdatavalid,
+  input  readdata,
+  input  waitrequest
+);
 
 modport csr(
   output address,
@@ -25,7 +37,7 @@ modport csr(
   input  readdata
 );
 
-modport mem(
+modport slave(
   input  address,
   input  read,
   input  write,

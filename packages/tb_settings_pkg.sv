@@ -8,4 +8,5 @@ parameter int RND_RVALID    = 0;
 
 parameter int DELAY_MEAN_VAL = 10;
 
+
 endpackage : tb_settings_pkg

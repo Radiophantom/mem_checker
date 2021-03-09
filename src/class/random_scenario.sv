@@ -3,9 +3,9 @@
 import tb_settings_pkg::*;
 import rtl_settings_pkg::*;
 
-class random_scenario();
+class random_scenario;
 
-bathtube_distribution   bath_dist_obj;
+bathtube_distribution bath_dist_obj;
 
 localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) );
 
@@ -38,7 +38,7 @@ rand  bit   [ADDR_W - 1 : 0]    addr_ptrn;
 rand  bit   [7  : 0]            data_ptrn;
 
 constraint base_constraints {
-  burst_count   <= MAX_BURST_VAL;
+  burstcount   <= MAX_BURST_VAL;
   err_trans_num <= trans_amount;
 }
 
@@ -64,14 +64,14 @@ constraint addr_mode_constraint {
 
 constraint error_enable_constraint {
   if( test_mode == 3 )
-    begin
-      error_enable dist {
-        0 := ( 100 - err_probability ),
-        1 := ( err_probability       )
-      };
-    end
+    err_enable dist {
+      0 := ( 100 - err_probability ),
+      1 := ( err_probability       )
+    };
   else
-    error_enable = 0;
+    err_enable dist {
+        0 := 100
+      };
 }
 
 bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
@@ -115,8 +115,8 @@ endfunction : prep_test_param
 
 function automatic void post_randomize();
   bath_dist_obj = new();
-  bath_dist_obj.set_dist_parameters( MAX_BURST_VAL );
-  bath_dist_obj.randomize();
+  bath_dist_obj.set_dist_parameters( MAX_BURST_VAL,  DELAY_MEAN_VAL);
+  void'( bath_dist_obj.randomize() );
   err_byte_num  = bath_dist_obj.value;
   bath_dist_obj = null;
 endfunction : post_randomize

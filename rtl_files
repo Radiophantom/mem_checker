@@ -1,0 +1,8 @@
+./rtl/address_block.sv
+./rtl/compare_block.sv
+./rtl/control_block.sv
+./rtl/csr_block.sv
+./rtl/fifo.sv
+./rtl/measure_block.sv
+./rtl/transmitter_block.sv
+./rtl/mem_checker.sv

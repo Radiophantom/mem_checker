@@ -12,8 +12,6 @@ module address_block(
   output logic  [ADDR_W - 1 : 0]                          next_addr_o
 );
 
-localparam int RND_ADDR_W = $bits( rnd_addr );
-
 addr_mode_t                       addr_mode;
 
 logic         [ADDR_W - 1 : 0]    fix_addr;
@@ -28,26 +26,28 @@ logic                             run_1_en;
 logic                             inc_addr_en;
 
 logic                             rnd_gen_bit;
-
+logic [RND_ADDR_W - 1 : 0] rnd_addr = '1;
 generate
   if( ADDR_W <= 8 )
     begin
-      logic [7 : 0]  rnd_addr = '1;  
+      //logic [7 : 0]  rnd_addr = '1;  
       assign rnd_gen_bit = ( rnd_addr[7] ^ rnd_addr[5] ^ rnd_addr[4] ^ rnd_addr[3] );
     end
   else
     if( ADDR_W <= 16 )
       begin
-        logic [15 : 0]  rnd_addr = '1;
+        //logic [15 : 0]  rnd_addr = '1;
         assign rnd_gen_bit = ( rnd_addr[15] ^ rnd_addr[7] ^ rnd_addr[1] );
       end
     else
       if( ADDR_W <= 32 )
         begin
-          logic [31 : 0]  rnd_addr = '1;   
+          //logic [31 : 0]  rnd_addr = '1;   
           assign rnd_gen_bit = ( rnd_addr[31] ^ rnd_addr[21] ^ rnd_addr[1] ^ rnd_addr[0] );
         end
 endgenerate
+
+//localparam int RND_ADDR_W = $bits( rnd_addr );
 
 always_ff @( posedge clk_i )
   if( fix_addr_en )

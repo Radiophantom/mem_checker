@@ -3,7 +3,7 @@
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
-class driver();
+class driver;
 
 virtual amm_if #(
   .ADDR_W   ( 4   ),
@@ -14,8 +14,14 @@ mailbox   gen2driv_mbx;
 mailbox   driv2scb_test_mbx;
 mailbox   driv2scb_stat_mbx;
 
+typedef class random_scenario;
+typedef class statistics;
+
 random_scenario   rnd_scen_obj;
 statistics        stat_obj;
+
+event test_started;
+event test_finished;
 
 function new(
   virtual amm_if #(
@@ -47,8 +53,8 @@ local function automatic void init_interface();
 endfunction : init_interface
 
 local task automatic wr_word(
-      int           wr_addr,
-  ref bit [31 : 0]  wr_data
+  int           wr_addr,
+  bit [31 : 0]  wr_data
 );
   amm_if_v.address    <= wr_addr;
   amm_if_v.writedata  <= wr_data;

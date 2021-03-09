@@ -1,13 +1,21 @@
+`include "./random_scenario.sv"
+`include "./statistics.sv"
+`include "./generator.sv"
+`include "./driver.sv"
+`include "./amm_memory.sv"
+`include "./monitor.sv"
+`include "./scoreboard.sv"
+
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
-class environment();
+class environment;
 
-generator   gen;
-driver      driv;
-amm_memory  mem;
-monitor     mon;
-scoreboard  scb;
+generator gen;
+driver driv;
+amm_memory mem;
+monitor mon;
+scoreboard scb;
 
 mailbox gen2driv_mbx;
 mailbox gen2mem_mbx;
@@ -25,8 +33,8 @@ virtual amm_if #(
 ) amm_if_csr;
 
 virtual amm_if #(
-  .ADDR_W ( AMM_ADDR_W  ),
-  .DATA_W ( AMM_DATA_W  ),
+  .ADDR_W   ( AMM_ADDR_W  ),
+  .DATA_W   ( AMM_DATA_W  ),
   .BURST_W  ( AMM_BURST_W )
 ) amm_if_mem;
 
@@ -36,8 +44,8 @@ function new(
     .DATA_W ( 32 )
   ) amm_if_csr,
   virtual amm_if #(
-    .ADDR_W ( AMM_ADDR_W  ),
-    .DATA_W ( AMM_DATA_W  ),
+    .ADDR_W   ( AMM_ADDR_W  ),
+    .DATA_W   ( AMM_DATA_W  ),
     .BURST_W  ( AMM_BURST_W )
   ) amm_if_mem
 );
@@ -58,13 +66,13 @@ function new(
 endfunction
 
 task automatic run();
-
   gen.run();
   driv.run();
   mem.run();
   mon.run();
   scb.test_amount = 3500;
   scb.run();
+  wait( scb.test_amount == 0 );
 endtask : run
 
-end class : environment
+endclass : environment

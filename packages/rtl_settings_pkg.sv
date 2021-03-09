@@ -18,6 +18,10 @@ parameter int     ADDR_W        = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog
 parameter int     CMP_ADDR_W    = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
                                                           ( ADDR_W            );
 
+parameter int     RND_ADDR_W    = ( ADDR_W <= 8 ) ? ( 8 ):
+                                                    ( ( ADDR_W <= 16 ) ? ( 16 ):
+                                                                         ( 32 ));
+
 parameter int CSR_TEST_START  = 0;
 parameter int CSR_TEST_PARAM  = 1;
 parameter int CSR_SET_ADDR    = 2;

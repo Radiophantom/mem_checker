@@ -1,4 +1,4 @@
-class bathtube_distribution();
+class bathtube_distribution;
 
 static int seed = 0;
 

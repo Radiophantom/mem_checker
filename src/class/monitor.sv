@@ -1,13 +1,7 @@
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
-class monitor();
-
-statistics stat_obj;
-
-mailbox mon2scb_mbx;
-
-event   test_finished;
+class monitor;
 
 bit [7 : 0] wr_ticks;
 bit [7 : 0] wr_units;
@@ -22,17 +16,25 @@ int next_trans_id     = 0;
 int cur_trans_id      = 0;
 int words_amount_left = 0;
 
+typedef class statistics;
+
+statistics stat_obj;
+
+mailbox mon2scb_mbx;
+
+event   test_finished;
+
 virtual amm_if #(
-  .ADDR_W   ( ADDR_W  ),
-  .DATA_W   ( DATA_W  ),
-  .BURST_W  ( BURST_W )
+  .ADDR_W   ( AMM_ADDR_W  ),
+  .DATA_W   ( AMM_DATA_W  ),
+  .BURST_W  ( AMM_BURST_W )
 ) amm_if_v;
 
 function new(
   virtual amm_if #(
-    .ADDR_W   ( ADDR_W  ),
-    .DATA_W   ( DATA_W  ),
-    .BURST_W  ( BURST_W )
+    .ADDR_W   ( AMM_ADDR_W  ),
+    .DATA_W   ( AMM_DATA_W  ),
+    .BURST_W  ( AMM_BURST_W )
   ) amm_if_v,
   mailbox mon2scb_mbx,
   event   test_finished
@@ -64,9 +66,9 @@ local function automatic void reset_stat();
   max_delay      = 0;
   sum_delay      = 0;
   rd_req_amount  = 0;
-  cur_trans_id    = 0;
-  next_trans_id   = 0;
-endfunction : reset_variables
+  cur_trans_id   = 0;
+  next_trans_id  = 0;
+endfunction : reset_stat
 
 local task automatic wr_ticks_count();
   forever
@@ -75,7 +77,7 @@ local task automatic wr_ticks_count();
       if( amm_if_v.write )
         wr_ticks++;
     end
-endtask : rd_words_count
+endtask : wr_ticks_count
 
 local function automatic int bytes_count();
   foreach( amm_if_v.byteenable[i] )
@@ -164,7 +166,7 @@ local task automatic rd_ticks_count();
       if( words_amount_left )
         rd_ticks++;
     end
-endtask : rd_ticks
+endtask : rd_ticks_count
 
 local function automatic void save_stat();
   stat_obj.stat_registers[CSR_WR_TICKS] = wr_ticks;

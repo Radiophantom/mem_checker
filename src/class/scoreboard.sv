@@ -1,18 +1,21 @@
 import tb_settings_pkg::*;
 
-class scoreboard();
+class scoreboard;
 
-random_scenario   received_scen;
-random_scenario   reference_scen;
-statistics        received_stat;
-statistics        reference_stat;
+int test_amount = 0;
+
+typedef class random_scenario;
+typedef class statistics;
+
+random_scenario received_scen;
+random_scenario reference_scen;
+statistics received_stat;
+statistics reference_stat;
 
 mailbox driv2scb_test_mbx;
 mailbox driv2scb_stat_mbx;
 mailbox mem2scb_mbx;
 mailbox mon2scb_mbx;
-
-int test_amount = 0;
 
 function new(
   mailbox driv2scb_test_mbx,
@@ -79,7 +82,6 @@ function automatic void run();
       $stop();
 
   join_none
-
 endfunction : run
 
 endclass : scoreboard

@@ -1,13 +1,22 @@
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
-class amm_memory();
-
-random_scenario   rnd_scen_obj;
+class amm_memory;
 
 bit [7 : 0] memory_array    [*];
 bit [7 : 0] rd_data_channel [$];
 bit [7 : 0] wr_data_channel [$];
+
+int insert_error  = 0;
+int cur_trans_num = 0;
+int err_trans_num = 0;
+int err_byte_num  = 0;
+
+int seed      = 0;
+
+typedef class random_scenario;
+
+random_scenario rnd_scen_obj;
 
 mailbox gen2mem_mbx;
 mailbox mem2scb_mbx;
@@ -52,11 +61,6 @@ local function automatic void init_interface();
   amm_if_v.burstcount     = '0;
 endfunction : init_interface
 
-int insert_error  = 0;
-int cur_trans_num = 0;
-int err_trans_num = 0;
-int err_byte_num  = 0;
-
 local task automatic wr_mem(
   int unsigned  wr_addr,
   int           bytes_amount
@@ -76,14 +80,12 @@ local task automatic wr_mem(
   join_none
 endtask : wr_mem
 
-int rnd_seed = 0;
-
 local task automatic rd_mem(
   int unsigned  rd_addr,
   int           bytes_amount
 );
   int transaction_amount  = ( bytes_amount / MEM_DATA_B_W );
-  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL );
+  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL ) + 2;
   repeat( delay_ticks )
     @( posedge amm_if_v.clk );
   repeat( transaction_amount )
@@ -97,13 +99,13 @@ local task automatic rd_mem(
     end
 endtask : rd_mem
 
-local function automatic int start_offset( ref bit [DATA_B_W - 1 : 0] byteenable );
+local function automatic int start_offset( bit [DATA_B_W - 1 : 0] byteenable );
   for( int i = 0; i < DATA_B_W; i++ )
     if( byteenable[i] )
       return( i );
 endfunction : start_offset
 
-local task automatic void scan_test_mbx();
+local task automatic scan_test_mbx();
   forever
     begin
       @( test_started );  //wait( test_started.triggered );
@@ -118,8 +120,8 @@ local task automatic void scan_test_mbx();
 endtask : scan_test_mbx
 
 local function automatic bit [7 : 0] corrupt_data(
-  ref int unsigned          wr_addr,        
-  ref bit           [7 : 0] wr_data
+  int unsigned          wr_addr,        
+  bit           [7 : 0] wr_data
 );
   corrupt_data = ( ~wr_data );
   rnd_scen_obj.test_result_registers[CSR_TEST_RESULT] = 32'( 1 );
@@ -127,7 +129,10 @@ local function automatic bit [7 : 0] corrupt_data(
   rnd_scen_obj.test_result_registers[CSR_ERR_DATA   ] = { wr_data, corrupt_data };
 endfunction : corrupt_data
 
-local task automatic wr_data_collect( int bytes_amount );
+local task automatic wr_data_collect(
+  ref int unsigned wr_addr,
+  int bytes_amount
+);
   int byte_num = 0;
   bit [7 : 0] wr_byte;
 
@@ -138,9 +143,9 @@ local task automatic wr_data_collect( int bytes_amount );
         if( amm_if_v.byteenable[i] )        // check if byteenable tester behavior correct or not --"&& ( bytes_amount > 0 ) )"--
           begin
             if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
-              wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] ) );
+              wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
             else
-              wr_byte = amm_if_v.writedata[7 + i * 8 -: 8] );
+              wr_byte = amm_if_v.writedata[7 + i * 8 -: 8];
             wr_data_channel.push_back( wr_byte );
             bytes_amount--;
             byte_num++;
@@ -148,7 +153,7 @@ local task automatic wr_data_collect( int bytes_amount );
       if( wr_data_channel.size() >= DATA_B_W )
         begin
           amm_if_v.waitrequest <= 1'b1;
-          wait( wr_data_channel.size() == 0 )
+          wait( wr_data_channel.size() == 0 );
         end
       if( RND_WAITREQ && ( bytes_amount > 0 ) )
         begin
@@ -181,7 +186,7 @@ local task automatic wr_data();
       bytes_amount  = amm_if_v.burstcount * DATA_B_W;
     end
   wr_mem( wr_addr, bytes_amount );
-  wr_data_collect( bytes_amount );
+  wr_data_collect( wr_addr, bytes_amount );
 endtask : wr_data
 
 local task automatic rd_data();
@@ -223,7 +228,7 @@ local task automatic send_data();
     end
 endtask : send_data
 
-local task automatic run();
+task automatic run();
   fork
     scan_test_mbx();
     send_data();

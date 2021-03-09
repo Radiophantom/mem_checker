@@ -1,7 +1,9 @@
+
+
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
-`timescale 1 ps / 1 ps
+`timescale 1 ns / 1 ns
 
 module mem_checker_tb();
 
@@ -22,12 +24,12 @@ initial
     rst = 1'b0;
   end
 
-amm_if.csr #(
+amm_if #(
   .ADDR_W ( 4 ),
   .DATA_W ( 32 )
 ) amm_if_csr( clk_sys );
 
-amm_if.slave #(
+amm_if #(
   .ADDR_W ( AMM_ADDR_W ),
   .DATA_W ( AMM_DATA_W ),
   .BURST_W ( AMM_BURST_W )
@@ -41,10 +43,10 @@ mem_checker mem_checker_inst(
   .clk_mem_i ( clk_mem ),
 
   .sys_read_i( amm_if_csr.read ),
-  .sys_write_i( amm_if_csr.writedata ),
+  .sys_write_i( amm_if_csr.write ),
   .sys_address_i( amm_if_csr.address ),
   .sys_writedata_i( amm_if_csr.writedata ),
-  .sys_readdatavalid_i( amm_if_csr.readdatavalid ),
+  .sys_readdatavalid_o( amm_if_csr.readdatavalid ),
   .sys_readdata_o( amm_if_csr.readdata ),
 
   .mem_readdatavalid_i( amm_if_mem.readdatavalid ),
@@ -57,7 +59,7 @@ mem_checker mem_checker_inst(
   .mem_write_o( amm_if_mem.write ),
   .mem_writedata_o( amm_if_mem.writedata   ),
   .mem_burstcount_o( amm_if_mem.burstcount ),
-  .mem_byteenable_o( amm_if_mem.byteenable ),
+  .mem_byteenable_o( amm_if_mem.byteenable )
 );
 
 endmodule : mem_checker_tb

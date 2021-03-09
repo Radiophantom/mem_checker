@@ -22,7 +22,10 @@ module compare_block(
 );
 
 localparam int CMP_W      = $bits( cmp_struct_t             );
-localparam int ADDR_CNT_W = $bits( cmp_struct_t.start_addr  );
+
+logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
+
+logic   [CMP_W - 1      : 0]                    cmp_fifo_q;
 
 fifo #(
   .AWIDTH   ( 2               ),
@@ -59,11 +62,9 @@ fifo #(
 cmp_struct_t                                    storage_struct;
 
 logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0]  check_readdata;
-logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
 
-logic   [CMP_W - 1      : 0]                    cmp_fifo_q;
 
-logic   [ADDR_CNT_W - 1 : 0]                    check_addr_cnt;
+logic   [CMP_ADDR_W - 1 : 0]                    check_addr_cnt;
 
 logic   [DATA_B_W - 1 : 0]                      err_byte_flag;
 logic   [DATA_B_W - 1 : 0][3 : 0]               err_byte_num_arr;
@@ -79,10 +80,10 @@ logic                                           last_word;
 
 logic   [1 : 0]                                 pipe_stage_en;
 logic   [1 : 0][7 : 0]                          check_data_ptrn;
-logic   [1 : 0][ADDR_CNT_W - 1 : 0]             check_addr;
+logic   [1 : 0][CMP_ADDR_W - 1 : 0]             check_addr;
 
-logic                                           rd_data_fifo, data_fifo_empty;
-logic                                           rd_cmp_fifo,  cmp_fifo_empty;
+//logic                                           rd_data_fifo, data_fifo_empty;
+//logic                                           rd_cmp_fifo,  cmp_fifo_empty;
 
 logic                                           check_error;
 logic                                           lock_error_stb;
