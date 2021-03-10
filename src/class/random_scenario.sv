@@ -12,6 +12,9 @@ localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) );
 localparam int MAX_BURST_BYTE_VAL = ( ADDR_TYPE == "BYTE" ) ? ( MAX_BURST_VAL            - 1 ):
                                                               ( MAX_BURST_VAL * DATA_B_W - 1 );
 
+bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
+bit [CSR_SET_DATA :  CSR_TEST_PARAM][31 : 0] test_param_registers;
+
 int read_only_mode;
 int write_only_mode;
 int write_read_mode;
@@ -40,7 +43,7 @@ rand  bit   [7  : 0]            data_ptrn;
 constraint base_constraints {
   burstcount   <= MAX_BURST_VAL;
   err_trans_num <= trans_amount;
-  trans_amount < 2**8;
+  trans_amount <= 2**5;
 }
 
 constraint test_mode_constraint {
@@ -75,9 +78,6 @@ constraint error_enable_constraint {
       };
 }
 
-bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
-bit [CSR_SET_DATA :  CSR_TEST_PARAM][31 : 0] test_param_registers;
-
 function automatic void set_test_mode_probability(
   int read_only_mode  = 30,
   int write_only_mode = 30,
@@ -109,15 +109,15 @@ function automatic void set_err_probability(
 endfunction
 
 function automatic void post_randomize();
+  test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
+  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
+  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
+  
   bath_dist_obj = new();
   bath_dist_obj.set_dist_parameters( MAX_BURST_VAL,  DELAY_MEAN_VAL);
   void'( bath_dist_obj.randomize() );
   err_byte_num  = bath_dist_obj.value;
   bath_dist_obj = null;
-
-  test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
-  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
-  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
 endfunction : post_randomize
 
 endclass : random_scenario

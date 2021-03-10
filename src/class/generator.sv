@@ -27,8 +27,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -37,8 +37,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -47,8 +47,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -57,8 +57,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -67,8 +67,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -77,8 +77,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
       repeat( 500 )
         begin
@@ -87,8 +87,8 @@ task automatic run();
           rnd_scen_obj.set_addr_mode_probability();
           rnd_scen_obj.set_err_probability();
           void'( rnd_scen_obj.randomize() );
-          gen2mem_mbx.put ( rnd_scen_obj );
           gen2driv_mbx.put( rnd_scen_obj );
+          gen2mem_mbx.put ( rnd_scen_obj );
         end
     end
   join_none

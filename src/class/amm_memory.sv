@@ -108,15 +108,13 @@ endfunction : start_offset
 local task automatic scan_test_mbx();
   forever
     begin
-      // @( test_started );  //
-      wait( test_started.triggered );
+      @( test_started );
       gen2mem_mbx.get( rnd_scen_obj );
       insert_error  = rnd_scen_obj.err_enable;
       err_byte_num  = rnd_scen_obj.err_byte_num;
       err_trans_num = rnd_scen_obj.err_trans_num;
       cur_trans_num = 0;
-      // @( test_finished ); //
-      wait( test_finished.triggered );
+      @( test_finished );
       mem2scb_mbx.put( rnd_scen_obj );
     end
 endtask : scan_test_mbx
@@ -138,7 +136,7 @@ local task automatic wr_data_collect(
   int byte_num = 0;
   bit [7 : 0] wr_byte;
 
-  while( bytes_amount )
+  while( bytes_amount != 0 )
     begin
       wait( amm_if_v.write );
       for( int i = 0; i < DATA_B_W; i++ )
@@ -149,8 +147,8 @@ local task automatic wr_data_collect(
             else
               wr_byte = amm_if_v.writedata[7 + i * 8 -: 8];
             wr_data_channel.push_back( wr_byte );
-            bytes_amount--;
-            byte_num++;
+            bytes_amount -= 1;
+            byte_num += 1;
           end
       if( wr_data_channel.size() >= DATA_B_W )
         begin
@@ -168,7 +166,7 @@ local task automatic wr_data_collect(
         end
       else
         amm_if_v.waitrequest <= 1'b0;
-      if( bytes_amount )
+      if( bytes_amount != 0 )
         @( posedge amm_if_v.clk );
     end
 endtask : wr_data_collect

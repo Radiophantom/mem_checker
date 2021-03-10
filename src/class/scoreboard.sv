@@ -32,7 +32,7 @@ endfunction
 task automatic run();
   fork
     begin
-      while( test_amount-- )
+      while( test_amount )
         begin
           driv2scb_test_mbx.get( received_scen  );
           mem2scb_mbx.get      ( reference_scen );
@@ -79,6 +79,8 @@ task automatic run();
                 $display( "Observed %0d register value : %0d", i, received_stat.stat_registers [i] );
                 $stop();
               end
+
+          test_amount--;
         end
 
         $display( "Test successfully passed, congratulations ladies and gentlements" );

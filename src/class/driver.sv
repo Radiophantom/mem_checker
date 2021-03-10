@@ -81,7 +81,7 @@ local task automatic poll_finish_bit();
   bit [31 : 0] rd_data;
   do
     rd_word( CSR_TEST_FINISH, rd_data );
-  while( rd_data == 0 );
+  while( rd_data != 1 );
 endtask : poll_finish_bit
 
 local task automatic start_test();

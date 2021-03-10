@@ -1,7 +1,7 @@
+`include "./src/class/environment.sv"
+
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
-
-`include "./src/class/environment.sv"
 
 `timescale 1 ps / 1 ps
 
@@ -35,13 +35,12 @@ initial
     rst = 1'b1;
     #( CLK_SYS_T / 2 );
     rst = 1'b0;
+
     env = new( amm_if_csr, amm_if_mem );
     repeat( 10 )
       @( posedge amm_if_csr.clk );
     env.run();
   end
-
-// test test_inst( amm_if_csr, amm_if_mem );
 
 mem_checker mem_checker_inst(
   .rst_i      ( rst     ),

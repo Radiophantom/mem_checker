@@ -7,7 +7,7 @@ bit [31 : 0] wr_ticks;
 bit [31 : 0] wr_units;
 bit [31 : 0] rd_ticks;
 bit [31 : 0] rd_words;
-bit [31 : 0] min_delay = 16'hFF_FF;
+bit [31 : 0] min_delay;
 bit [31 : 0] max_delay;
 bit [31 : 0] sum_delay;
 bit [31 : 0] rd_req_amount;
@@ -121,7 +121,8 @@ local task automatic rd_req_count();
           words_amount_left += amm_if_v.burstcount;
           next_trans_id++;
           rd_req_amount++;
-          wait( !amm_if_v.waitrequest );
+          while( amm_if_v.waitrequest )
+            @( posedge amm_if_v.clk );
         end 
     end
 endtask : rd_req_count
@@ -132,7 +133,7 @@ local task automatic delay_count( int trans_id );
   int count_enable  = 1;
 
   fork
-    while( count_enable )
+    while( count_enable == 1 )
       begin
         @( posedge amm_if_v.clk );
         delay_cnt++;
@@ -163,7 +164,7 @@ local task automatic rd_ticks_count();
   forever
     begin
       @( posedge amm_if_v.clk );
-      if( words_amount_left )
+      if( words_amount_left != 0 )
         rd_ticks++;
     end
 endtask : rd_ticks_count
@@ -191,10 +192,10 @@ task automatic run();
   fork
     forever
       begin
+        reset_stat();
         @( test_finished );
         stat_obj = new();
         save_stat ();
-        reset_stat();
         mon2scb_mbx.put( stat_obj );
       end
   join_none
