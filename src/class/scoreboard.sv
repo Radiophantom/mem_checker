@@ -29,59 +29,62 @@ function new(
   this.mon2scb_mbx        = mon2scb_mbx;
 endfunction
 
-function automatic void run();
+task automatic run();
   fork
-    repeat( test_amount )
-      begin
-        driv2scb_test_mbx.get( received_scen  );
-        mem2scb_mbx.get      ( reference_scen );
-        driv2scb_stat_mbx.get( received_stat  );
-        mon2scb_mbx.get      ( reference_stat );
+    begin
+      while( test_amount-- )
+        begin
+          driv2scb_test_mbx.get( received_scen  );
+          mem2scb_mbx.get      ( reference_scen );
+          driv2scb_stat_mbx.get( received_stat  );
+          mon2scb_mbx.get      ( reference_stat );
 
-        if( reference_scen.test_result_registers[CSR_TEST_RESULT] == received_scen.test_result_registers[CSR_TEST_RESULT] )
-          if( reference_scen.test_result_registers[CSR_TEST_RESULT] == 1 )
+          if( reference_scen.test_result_registers[CSR_TEST_RESULT] == received_scen.test_result_registers[CSR_TEST_RESULT] )
             begin
-              if( received_scen.test_result_registers[CSR_ERR_ADDR] != reference_scen.test_result_registers[CSR_ERR_ADDR] )
+              if( reference_scen.test_result_registers[CSR_TEST_RESULT] == 1 )
                 begin
-                  $display( "Expected error address : %0d", reference_scen.test_result_registers[CSR_ERR_ADDR] );
-                  $display( "Observed error address : %0d", received_scen.test_result_registers [CSR_ERR_ADDR] );
+                  if( received_scen.test_result_registers[CSR_ERR_ADDR] != reference_scen.test_result_registers[CSR_ERR_ADDR] )
+                    begin
+                      $display( "Expected error address : %0d", reference_scen.test_result_registers[CSR_ERR_ADDR] );
+                      $display( "Observed error address : %0d", received_scen.test_result_registers [CSR_ERR_ADDR] );
+                    end
+                  if( received_scen.test_result_registers[CSR_ERR_DATA] != reference_scen.test_result_registers[CSR_ERR_DATA] )
+                    begin
+                      $display( "Expected data error address :/n /t correct data =  %h; corrupted data =  %h", reference_scen.test_result_registers[CSR_ERR_ADDR][15 : 8], reference_scen.test_result_registers[CSR_ERR_ADDR][7 : 0] );
+                      $display( "Observed data error address :/n /t correct data =  %h; corrupted data =  %h", received_scen.test_result_registers [CSR_ERR_ADDR][15 : 8], received_scen.test_result_registers [CSR_ERR_ADDR][7 : 0] );
+                    end
+                  $stop();
                 end
-              if( received_scen.test_result_registers[CSR_ERR_DATA] != reference_scen.test_result_registers[CSR_ERR_DATA] )
+            end
+          else
+            begin
+              $display( "Invalid test behavior" );
+              if( reference_scen.test_result_registers[CSR_TEST_RESULT] == 0 )
                 begin
-                  $display( "Expected data error address :/n /t correct data =  %h; corrupted data =  %h", reference_scen.test_result_registers[CSR_ERR_ADDR][15 : 8], reference_scen.test_result_registers[CSR_ERR_ADDR][7 : 0] );
-                  $display( "Observed data error address :/n /t correct data =  %h; corrupted data =  %h", received_scen.test_result_registers [CSR_ERR_ADDR][15 : 8], received_scen.test_result_registers [CSR_ERR_ADDR][7 : 0] );
+                  $display( "Expected : no error found" );
+                  $display( "Observed : error found"    );
+                end
+              else
+                begin
+                  $display( "Expected : error found"    );
+                  $display( "Observed : no error found" );
                 end
               $stop();
             end
-        else
-          begin
-            $display( "Invalid test behavior" );
-            if( reference_scen.test_result_registers[CSR_TEST_RESULT] == 0 )
+
+          foreach( reference_stat.stat_registers[i] )
+            if( reference_stat.stat_registers[i] != received_stat.stat_registers[i] )
               begin
-                $display( "Expected : no error found" );
-                $display( "Observed : error found"    );
+                $display( "Expected %0d register value : %0d", i, reference_stat.stat_registers[i] );
+                $display( "Observed %0d register value : %0d", i, received_stat.stat_registers [i] );
+                $stop();
               end
-            else
-              begin
-                $display( "Expected : error found"    );
-                $display( "Observed : no error found" );
-              end
-            $stop();
-          end
+        end
 
-        foreach( reference_stat.stat_registers[i] )
-          if( reference_stat.stat_registers[i] != received_stat.stat_registers[i] )
-            begin
-              $display( "Expected %0d register value : %0d", i, reference_stat.stat_registers[i] );
-              $display( "Observed %0d register value : %0d", i, received_stat.stat_registers [i] );
-              $stop();
-            end
-      end
-
-      $display( "Test successfully passed, congratulations ladies and gentlements" );
-      $stop();
-
+        $display( "Test successfully passed, congratulations ladies and gentlements" );
+        $stop();
+    end
   join_none
-endfunction : run
+endtask : run
 
 endclass : scoreboard

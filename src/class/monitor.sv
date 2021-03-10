@@ -3,14 +3,14 @@ import tb_settings_pkg::*;
 
 class monitor;
 
-bit [7 : 0] wr_ticks;
-bit [7 : 0] wr_units;
-bit [7 : 0] rd_ticks;
-bit [7 : 0] rd_words;
-bit [7 : 0] min_delay;
-bit [7 : 0] max_delay;
-bit [7 : 0] sum_delay;
-bit [7 : 0] rd_req_amount;
+bit [31 : 0] wr_ticks;
+bit [31 : 0] wr_units;
+bit [31 : 0] rd_ticks;
+bit [31 : 0] rd_words;
+bit [31 : 0] min_delay = 16'hFF_FF;
+bit [31 : 0] max_delay;
+bit [31 : 0] sum_delay;
+bit [31 : 0] rd_req_amount;
 
 int next_trans_id     = 0;
 int cur_trans_id      = 0;
@@ -62,7 +62,7 @@ local function automatic void reset_stat();
   wr_units       = 0;
   rd_ticks       = 0;
   rd_words       = 0;
-  min_delay      = 0;
+  min_delay      = 16'hFF_FF;
   max_delay      = 0;
   sum_delay      = 0;
   rd_req_amount  = 0;

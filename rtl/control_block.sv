@@ -19,7 +19,7 @@ module control_block(
   input                                                   meas_busy_i,
 
   // Transmitter block interface
-  input                                                   trans_process_i,
+  input                                                   trans_ready_i,
   input                                                   trans_busy_i,
 
   output logic                                            trans_valid_o,
@@ -57,8 +57,6 @@ logic                     addr_preset_stb;
 logic                     trans_en_state; 
 logic                     cnt_en_state;
 logic                     finish_state;
-
-logic                     cmd_accept_ready;
 
 enum logic [2:0] {
   IDLE_S,
@@ -170,7 +168,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( state == LOAD_S )
         trans_valid_o <= 1'b1;
       else
-        if( trans_en_state && last_transaction_stb )
+        if( cnt_en_state && last_transaction_stb )
           trans_valid_o <= 1'b0;
 
 always_ff @( posedge clk_i )
@@ -227,8 +225,7 @@ assign finish_flag          = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_bu
 assign test_count           = test_param_i[CSR_TEST_PARAM][31 : 16];
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
-assign cmd_accept_ready     = ( !trans_process_i );
-assign cmd_accepted_stb     = ( trans_valid_o   && cmd_accept_ready );
+assign cmd_accepted_stb     = ( trans_valid_o   && trans_ready_i );
 assign last_transaction_stb = ( last_transaction && cmd_accepted_stb );
 
 endmodule : control_block

@@ -176,12 +176,12 @@ generate
           //----------------------------------------------------------------------------------
           localparam int STAGE_W        = $clog2( PIPE_W ) + 1;
           localparam int STAGES_AMOUNT  = $clog2( INPUTS_AMOUNT );
-          localparam int SUM_W          = $clog2( STAGES_AMOUNT ) + STAGE_W;
+          localparam int SUM_W          = STAGES_AMOUNT + STAGE_W;
 
           logic [STAGES_AMOUNT - 1 : 0][INPUTS_AMOUNT - 1 : 0][SUM_W - 1   : 0] bytes_amount_sum;
           logic                        [INPUTS_AMOUNT - 1 : 0][STAGE_W - 1 : 0] bytes_amount;
 
-          logic [STAGES_AMOUNT - 1 : 0] wr_stb_delayed;
+          logic [STAGES_AMOUNT : 0] wr_stb_delayed;
 
           always_ff @( posedge clk_i )
             if( wr_unit_stb )
@@ -201,13 +201,13 @@ generate
             if( rst_i )
               wr_stb_delayed <= STAGES_AMOUNT'( 0 );
             else
-              wr_stb_delayed <= { wr_stb_delayed[STAGES_AMOUNT - 2 : 0], wr_unit_stb };
+              wr_stb_delayed <= { wr_stb_delayed[STAGES_AMOUNT - 1 : 0], wr_unit_stb };
 
           always_ff @( posedge clk_i )
             if( test_start_i )
               wr_units <= 32'( 0 );
             else
-              if( wr_stb_delayed[STAGES_AMOUNT - 1] )
+              if( wr_stb_delayed[STAGES_AMOUNT] )
                 wr_units <= wr_units + bytes_amount_sum[STAGES_AMOUNT - 1][0];
 
           assign write_busy = ( |wr_stb_delayed );

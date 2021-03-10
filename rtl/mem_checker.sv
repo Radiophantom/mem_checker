@@ -48,7 +48,7 @@ logic                   test_start;
 logic                   cmp_en;
 cmp_struct_t            cmp_struct;
 
-logic                   trans_process;
+logic                   trans_ready;
 
 csr_block csr_block_inst( 
   .rst_i            ( rst_i                                         ),
@@ -84,7 +84,7 @@ control_block control_block_inst(
                                               
   .meas_busy_i      ( meas_busy                                     ),
                                               
-  .trans_process_i  ( trans_process                                 ),
+  .trans_ready_i    ( trans_ready                                   ),
   .trans_busy_i     ( trans_busy                                    ),
                                               
   .trans_valid_o    ( trans_valid                                   ),
@@ -102,7 +102,7 @@ transmitter_block transmitter_block_inst(
   .trans_addr_i       ( trans_addr                                    ),
   .trans_type_i       ( trans_type                                    ),
                                                  
-  .trans_ready_o      ( trans_process                                 ),
+  .trans_ready_o      ( trans_ready                                   ),
   .trans_busy_o       ( trans_busy                                    ),
                                                  
   .cmp_error_i        ( cmp_error                                     ),
@@ -110,8 +110,6 @@ transmitter_block transmitter_block_inst(
   .cmp_en_o           ( cmp_en                                        ),
   .cmp_struct_o       ( cmp_struct                                    ),
 
-  .readdatavalid_i    ( mem_readdatavalid_i                         ),
-  .readdata_i         ( mem_readdata_i                              ),
   .waitrequest_i      ( mem_waitrequest_i                           ),
                                               
   .address_o          ( mem_address_o                               ),

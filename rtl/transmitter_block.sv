@@ -22,8 +22,6 @@ module transmitter_block(
   output cmp_struct_t                                     cmp_struct_o,
 
   // AMM_master interface
-  input                                                   readdatavalid_i,
-  input         [AMM_DATA_W - 1   : 0]                    readdata_i,
   input                                                   waitrequest_i,
 
   output logic  [AMM_ADDR_W - 1   : 0]                    address_o,
@@ -68,7 +66,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( cmp_error_i )
       storage_valid <= 1'b0;
     else
-      if( !in_process )
+      if( trans_ready_o )
         storage_valid <= trans_valid_i;
 
 always_ff @( posedge clk_i )
@@ -91,6 +89,9 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( last_transaction && !waitrequest_i )
         in_process <= 1'b0;
 
+logic [DATA_B_W - 1 : 0] start_mask;
+logic [DATA_B_W - 1 : 0] end_mask;
+
 generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
@@ -102,6 +103,8 @@ generate
             storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
             storage_struct.end_off    <= ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount );
+            start_mask                <= byteenable_ptrn( 1'b1, trans_addr_i[ADDR_B_W - 1 : 0],  1'b0,  ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount ) );
+            end_mask                  <= byteenable_ptrn( 1'b0, trans_addr_i[ADDR_B_W - 1 : 0],  1'b1,  ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount ) );
           end
 
       always_ff @( posedge clk_i )
@@ -161,10 +164,16 @@ generate
             if( storage_struct.trans_type )
               byteenable_o <= '1;
             else
-              byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !storage_burst_en ),  storage_struct.end_off  );
+              if( storage_burst_en )
+                byteenable_o <= start_mask;
+              else
+                byteenable_o <= ( start_mask & end_mask );
           else
             if( !last_transaction )
-              byteenable_o <= byteenable_ptrn( 1'b0, cur_struct.start_off,      ( last_transaction  ),  cur_struct.end_off      );
+              if( burst_cnt == 1 )
+                byteenable_o <= end_mask;
+              else
+                byteenable_o <= '1;
 
     end
   else
@@ -217,8 +226,11 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     write_o <= 1'b0;
   else
-    if( start_stb && ( !storage_struct.trans_type ) )
-      write_o <= 1'b1;
+    if( start_stb )
+      if( !storage_struct.trans_type )
+        write_o <= 1'b1;
+      else
+        write_o <= 1'b0;
     else
       if( last_transaction_stb )
         write_o <= 1'b0;
@@ -227,8 +239,11 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     read_o <= 1'b0;
   else
-    if( start_stb && storage_struct.trans_type )
-      read_o <= 1'b1;
+    if( start_stb )
+      if( storage_struct.trans_type )
+        read_o <= 1'b1;
+      else
+        read_o <= 1'b0;   
     else
       if( !waitrequest_i )
         read_o <= 1'b0;
@@ -257,13 +272,13 @@ assign data_ptrn            = test_param_i[CSR_SET_DATA  ][7 : 0              ];
 assign burstcount           = test_param_i[CSR_TEST_PARAM][AMM_BURST_W - 2 : 0];
 
 assign data_mode            = data_mode_t'( test_param_i[CSR_TEST_PARAM][12]      );
-assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][17 : 16] );
+assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
 assign data_gen_bit         = ( rnd_data[6] ^ rnd_data[1] ^ rnd_data[0] );
 
 assign trans_busy_o         = ( in_process || storage_valid );
 
-assign trans_ready_o        = ( !in_process );
+assign trans_ready_o        = ( start_stb || !in_process );
 
 assign writedata_en         = ( start_stb     && ( !storage_struct.trans_type ) ) ||
                               ( wr_unit_stb   && ( !last_transaction          ) );

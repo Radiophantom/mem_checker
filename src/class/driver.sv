@@ -71,7 +71,6 @@ local task automatic rd_word(
   amm_if_v.read     <= 1'b1;
   @( posedge amm_if_v.clk );
   amm_if_v.read     <= 1'b0;
-  @( posedge amm_if_v.clk );
   do
     @( posedge amm_if_v.clk );
   while( !amm_if_v.readdatavalid );
@@ -106,17 +105,19 @@ local task automatic save_test_result();
 endtask : save_test_result
 
 task automatic run();
-  forever
-    begin
-      gen2driv_mbx.get( rnd_scen_obj );
-      start_test();
-      -> test_started;
-      poll_finish_bit();
-      -> test_finished;
-      save_test_result();
-      driv2scb_test_mbx.put( rnd_scen_obj );
-      driv2scb_stat_mbx.put( stat_obj     );
-    end
+  fork
+    forever
+      begin
+        gen2driv_mbx.get( rnd_scen_obj );
+        start_test();
+        -> test_started;
+        poll_finish_bit();
+        -> test_finished;
+        save_test_result();
+        driv2scb_test_mbx.put( rnd_scen_obj );
+        driv2scb_stat_mbx.put( stat_obj     );
+      end
+  join_none
 endtask : run
 
 endclass : driver

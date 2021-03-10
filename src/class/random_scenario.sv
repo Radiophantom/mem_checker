@@ -40,6 +40,7 @@ rand  bit   [7  : 0]            data_ptrn;
 constraint base_constraints {
   burstcount   <= MAX_BURST_VAL;
   err_trans_num <= trans_amount;
+  trans_amount < 2**8;
 }
 
 constraint test_mode_constraint {
@@ -107,18 +108,16 @@ function automatic void set_err_probability(
   this.err_probability  = err_probability;
 endfunction
 
-function automatic void prep_test_param();
-  test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
-  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
-  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
-endfunction : prep_test_param
-
 function automatic void post_randomize();
   bath_dist_obj = new();
   bath_dist_obj.set_dist_parameters( MAX_BURST_VAL,  DELAY_MEAN_VAL);
   void'( bath_dist_obj.randomize() );
   err_byte_num  = bath_dist_obj.value;
   bath_dist_obj = null;
+
+  test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
+  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
+  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
 endfunction : post_randomize
 
 endclass : random_scenario

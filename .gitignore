@@ -3,6 +3,7 @@
 *.qsf
 *.bak
 *.qws
+*.wlf
 db/
 output_files/
 incremental_db/

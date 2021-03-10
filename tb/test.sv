@@ -1,25 +1,22 @@
-`include "../src/class/environment.sv"
+`include "./src/class/environment.sv"
 
 import rtl_settings_pkg::*;
 
-program automatic test(
-  amm_if.csr /*#(
-    .ADDR_W ( 4   ),
-    .DATA_W ( 32  )
-  )*/ amm_if_csr,
-  amm_if.mem /*#(
-    .ADDR_W   ( AMM_ADDR_W  ),
-    .DATA_W   ( AMM_DATA_W  ),
-    .BURST_W  ( AMM_BURST_W )
-  )*/ amm_if_mem
+module test(
+  amm_if.csr amm_if_csr,
+  amm_if.mem amm_if_mem
 );
+
+//typedef class environment;
 
 environment env;
 
 initial
   begin
     env = new( amm_if_csr, amm_if_mem );
+    repeat( 10 )
+      @( posedge amm_if_csr.clk );
     env.run();
   end
 
-endprogram : test
+endmodule : test

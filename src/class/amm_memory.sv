@@ -108,13 +108,15 @@ endfunction : start_offset
 local task automatic scan_test_mbx();
   forever
     begin
-      @( test_started );  //wait( test_started.triggered );
+      // @( test_started );  //
+      wait( test_started.triggered );
       gen2mem_mbx.get( rnd_scen_obj );
       insert_error  = rnd_scen_obj.err_enable;
       err_byte_num  = rnd_scen_obj.err_byte_num;
       err_trans_num = rnd_scen_obj.err_trans_num;
       cur_trans_num = 0;
-      @( test_finished ); //wait( test_finished.triggered );
+      // @( test_finished ); //
+      wait( test_finished.triggered );
       mem2scb_mbx.put( rnd_scen_obj );
     end
 endtask : scan_test_mbx

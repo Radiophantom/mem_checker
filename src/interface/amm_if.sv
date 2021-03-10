@@ -3,7 +3,7 @@ interface amm_if#(
   parameter int DATA_W  = 31,
   parameter int BURST_W = 11
 )(
-  input clk
+  input bit clk
 );
 
 logic                       read;
