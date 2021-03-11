@@ -9,8 +9,8 @@ typedef class statistics;
 
 random_scenario received_scen;
 random_scenario reference_scen;
-statistics received_stat;
-statistics reference_stat;
+statistics      received_stat;
+statistics      reference_stat;
 
 mailbox driv2scb_test_mbx;
 mailbox driv2scb_stat_mbx;

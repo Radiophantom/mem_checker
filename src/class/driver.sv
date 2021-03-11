@@ -71,6 +71,7 @@ local task automatic rd_word(
   amm_if_v.read     <= 1'b1;
   @( posedge amm_if_v.clk );
   amm_if_v.read     <= 1'b0;
+  @( posedge amm_if_v.clk );
   do
     @( posedge amm_if_v.clk );
   while( !amm_if_v.readdatavalid );
@@ -81,7 +82,7 @@ local task automatic poll_finish_bit();
   bit [31 : 0] rd_data;
   do
     rd_word( CSR_TEST_FINISH, rd_data );
-  while( rd_data != 1 );
+  while( rd_data == 0 );
 endtask : poll_finish_bit
 
 local task automatic start_test();
@@ -93,7 +94,6 @@ endtask : start_test
 
 local task automatic save_test_result();
   stat_obj = new();
-
   for( int i = CSR_TEST_RESULT; i <= CSR_ERR_DATA; i++ )
     begin
       rd_word( i, rnd_scen_obj.test_result_registers[i] );

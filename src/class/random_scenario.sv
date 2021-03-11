@@ -9,11 +9,10 @@ bathtube_distribution bath_dist_obj;
 
 localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) );
 
-localparam int MAX_BURST_BYTE_VAL = ( ADDR_TYPE == "BYTE" ) ? ( MAX_BURST_VAL            - 1 ):
-                                                              ( MAX_BURST_VAL * DATA_B_W - 1 );
-
 bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
 bit [CSR_SET_DATA :  CSR_TEST_PARAM][31 : 0] test_param_registers;
+
+int max_burst_byte_val; 
 
 int read_only_mode;
 int write_only_mode;
@@ -41,9 +40,9 @@ rand  bit   [ADDR_W - 1 : 0]    addr_ptrn;
 rand  bit   [7  : 0]            data_ptrn;
 
 constraint base_constraints {
-  burstcount   <= MAX_BURST_VAL;
-  err_trans_num <= trans_amount;
-  trans_amount <= 2**5;
+  burstcount    <  MAX_BURST_VAL;
+  trans_amount  <  2**5;
+  err_trans_num <=  trans_amount;
 }
 
 constraint test_mode_constraint {
@@ -74,8 +73,9 @@ constraint error_enable_constraint {
     };
   else
     err_enable dist {
-        0 := 100
-      };
+      0 := 100,
+      1 := 0
+    };
 }
 
 function automatic void set_test_mode_probability(
@@ -86,7 +86,7 @@ function automatic void set_test_mode_probability(
   this.read_only_mode   = read_only_mode;
   this.write_only_mode  = write_only_mode;
   this.write_read_mode  = write_read_mode;
-endfunction
+endfunction : set_test_mode_probability
 
 function automatic void set_addr_mode_probability(
   int fix_addr_mode   = 20,
@@ -100,24 +100,37 @@ function automatic void set_addr_mode_probability(
   this.run_0_addr_mode  = run_0_addr_mode;
   this.run_1_addr_mode  = run_1_addr_mode;
   this.inc_addr_mode    = inc_addr_mode;
-endfunction
+endfunction : set_addr_mode_probability
 
 function automatic void set_err_probability(
   int err_probability   = 20
 );
   this.err_probability  = err_probability;
-endfunction
+endfunction : set_err_probability
 
-function automatic void post_randomize();
+function automatic void prep_test_param();
   test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
   test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
   test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
-  
+endfunction : prep_test_param
+
+function automatic void err_byte_num_set();	
   bath_dist_obj = new();
-  bath_dist_obj.set_dist_parameters( MAX_BURST_VAL,  DELAY_MEAN_VAL);
-  void'( bath_dist_obj.randomize() );
-  err_byte_num  = bath_dist_obj.value;
+  bath_dist_obj.set_edge( max_burst_byte_val );
+  err_byte_num  = bath_dist_obj.get_value();
   bath_dist_obj = null;
+endfunction : err_byte_num_set
+
+function automatic void post_randomize();
+  prep_test_param();
+  if( err_enable )
+	  begin
+		  if( ADDR_TYPE == "BYTE" )
+		  	max_burst_byte_val = ( burstcount											   );
+		  else
+		  	max_burst_byte_val = ( ( burstcount + 1 ) * DATA_B_W - 1 );
+		  err_byte_num_set();
+		end
 endfunction : post_randomize
 
 endclass : random_scenario

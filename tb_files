@@ -1,2 +1,1 @@
-./tb/test.sv
 ./tb/mem_checker_tb.sv

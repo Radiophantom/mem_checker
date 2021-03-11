@@ -102,14 +102,53 @@ local task automatic rd_words_count();
     begin
       @( posedge amm_if_v.clk );
       if( amm_if_v.readdatavalid )
-        begin
-          rd_words++;
-          words_amount_left--;
-        end
+        rd_words++;
     end
 endtask : rd_words_count
 
+// local task automatic rd_words_count();
+//   forever
+//     begin
+//       @( posedge amm_if_v.clk );
+//       if( amm_if_v.readdatavalid )
+//         begin
+//           rd_words++;
+//           words_amount_left--;
+//         end
+//     end
+// endtask : rd_words_count
+
 local task automatic rd_req_count();
+  forever
+    begin
+      @( posedge amm_if_v.clk );
+      if( amm_if_v.read )
+        begin
+          rd_req_amount++;
+          while( amm_if_v.waitrequest )
+            @( posedge amm_if_v.clk );
+        end 
+    end
+endtask : rd_req_count
+
+// local task automatic rd_req_count();
+//   forever
+//     begin
+//       @( posedge amm_if_v.clk );
+//       if( amm_if_v.read )
+//         begin
+//           fork
+//             delay_count( next_trans_id );
+//           join_none
+//           words_amount_left += amm_if_v.burstcount;
+//           rd_req_amount++;
+//           while( amm_if_v.waitrequest )
+//             @( posedge amm_if_v.clk );
+//         end 
+//     end
+// endtask : rd_req_count
+
+local task automatic rd_delay_count();
   forever
     begin
       @( posedge amm_if_v.clk );
@@ -118,39 +157,38 @@ local task automatic rd_req_count();
           fork
             delay_count( next_trans_id );
           join_none
-          words_amount_left += amm_if_v.burstcount;
-          next_trans_id++;
-          rd_req_amount++;
           while( amm_if_v.waitrequest )
             @( posedge amm_if_v.clk );
         end 
     end
-endtask : rd_req_count
+endtask : rd_delay_count
 
 local task automatic delay_count( int trans_id );
   int words_amount  = amm_if_v.burstcount;
   int delay_cnt     = 0;
   int count_enable  = 1;
 
+  #0;
+  next_trans_id++;
+
   fork
-    while( count_enable == 1 )
+    while( 1 )
       begin
         @( posedge amm_if_v.clk );
         delay_cnt++;
+        if( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) )
+          break;
       end
   join_none
 
   while( words_amount )
     begin
       @( posedge amm_if_v.clk );
-      if( trans_id == cur_trans_id )
-        if( amm_if_v.readdatavalid )
-          begin
-            words_amount--;
-            count_enable = 0;
-          end
+      if( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) )
+        words_amount--;
     end
 
+  #0;
   cur_trans_id++;
 
   if( delay_cnt < min_delay )
@@ -164,7 +202,7 @@ local task automatic rd_ticks_count();
   forever
     begin
       @( posedge amm_if_v.clk );
-      if( words_amount_left != 0 )
+      if( next_trans_id != cur_trans_id )  
         rd_ticks++;
     end
 endtask : rd_ticks_count
@@ -187,6 +225,7 @@ task automatic run();
     rd_ticks_count();
     rd_words_count();
     rd_req_count  ();
+    rd_delay_count();
   join_none
 
   fork

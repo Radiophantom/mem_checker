@@ -80,12 +80,14 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( last_word_stb )
       active_cnt_num <= active_cnt_num + 1'b1;
 
-always_ff @( posedge clk_i )
-  if( rd_req_stb )
-    read_busy <= 1'b1;
+always_ff @( posedge clk_i, posedge rst_i )
+  // if( rd_req_stb )
+  //   read_busy <= 1'b1;
+  // else
+  if( rst_i )
+    read_busy <= 1'b0;
   else
-    if( active_cnt_num == load_cnt_num )
-      read_busy <= 1'b0;
+    read_busy <= ( active_cnt_num != load_cnt_num );
 
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
@@ -269,10 +271,10 @@ always_ff @( posedge clk_i )
 assign rd_req_stb     = ( read_i  && ( !rd_req_flag   ) );
 assign wr_unit_stb    = ( write_i && ( !waitrequest_i ) );
 
-assign last_word      = ( delay_cnt_array[active_cnt_num] == 1 );
+assign last_word      = ( word_cnt_array[active_cnt_num] == 1 );
 assign last_word_stb  = ( last_word && readdatavalid_i  );
 
-assign meas_busy_o    = ( !read_busy ) && ( !write_busy );
+assign meas_busy_o    = ( read_busy || write_busy );
 
 assign meas_result_o[CSR_WR_TICKS ] = wr_ticks;
 assign meas_result_o[CSR_WR_UNITS ] = wr_units;

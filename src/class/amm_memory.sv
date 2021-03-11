@@ -70,7 +70,7 @@ local task automatic wr_mem(
       begin
         @( posedge amm_if_v.clk );
         repeat( MEM_DATA_B_W )
-          if( wr_data_channel.size() )
+          if( wr_data_channel.size() && bytes_amount )
             begin
               memory_array[wr_addr] = wr_data_channel.pop_front();
               wr_addr++;
@@ -93,7 +93,10 @@ local task automatic rd_mem(
       @( posedge amm_if_v.clk );
       repeat( MEM_DATA_B_W )
         begin
-          rd_data_channel.push_back( memory_array[rd_addr] );
+          if( memory_array.exists( rd_addr ) )
+            rd_data_channel.push_back( memory_array[rd_addr] );
+          else
+            rd_data_channel.push_back( 8'h00 );
           rd_addr++;
         end
     end
@@ -136,37 +139,41 @@ local task automatic wr_data_collect(
   int byte_num = 0;
   bit [7 : 0] wr_byte;
 
-  while( bytes_amount != 0 )
+  while( bytes_amount )
     begin
-      wait( amm_if_v.write );
-      for( int i = 0; i < DATA_B_W; i++ )
-        if( amm_if_v.byteenable[i] )        // check if byteenable tester behavior correct or not --"&& ( bytes_amount > 0 ) )"--
-          begin
-            if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
-              wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
-            else
-              wr_byte = amm_if_v.writedata[7 + i * 8 -: 8];
-            wr_data_channel.push_back( wr_byte );
-            bytes_amount -= 1;
-            byte_num += 1;
-          end
-      if( wr_data_channel.size() >= DATA_B_W )
+      if( amm_if_v.write )
         begin
-          amm_if_v.waitrequest <= 1'b1;
-          wait( wr_data_channel.size() == 0 );
-        end
-      if( RND_WAITREQ && ( bytes_amount > 0 ) )
-        begin
-          amm_if_v.waitrequest <= $urandom_range( 1 );
-          while( amm_if_v.waitrequest )
+          for( int i = 0; i < DATA_B_W; i++ )
+            if( amm_if_v.byteenable[i] )
+              begin
+                if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
+                  wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
+                else
+                  wr_byte = amm_if_v.writedata[7 + i * 8 -: 8];
+                wr_data_channel.push_back( wr_byte );
+                bytes_amount--;
+                byte_num++;
+              end
+          if( wr_data_channel.size() >= DATA_B_W )
             begin
-              @( posedge amm_if_v.clk );
-              amm_if_v.waitrequest <= $urandom_range( 1 );
+              amm_if_v.waitrequest <= 1'b1;
+              wait( wr_data_channel.size() == 0 );
             end
+          if( RND_WAITREQ && bytes_amount )
+            begin
+              amm_if_v.waitrequest <= $urandom_range( 1 );
+              while( amm_if_v.waitrequest )
+                begin
+                  @( posedge amm_if_v.clk );
+                  amm_if_v.waitrequest <= $urandom_range( 1 );
+                end
+            end
+          else
+            amm_if_v.waitrequest <= 1'b0;
+          if( bytes_amount )
+            @( posedge amm_if_v.clk );
         end
       else
-        amm_if_v.waitrequest <= 1'b0;
-      if( bytes_amount != 0 )
         @( posedge amm_if_v.clk );
     end
 endtask : wr_data_collect
@@ -206,8 +213,9 @@ endtask : rd_data
 local task automatic send_data();
   forever
     begin
-      wait( rd_data_channel.size() >= DATA_B_W );
-      while( rd_data_channel.size() >= DATA_B_W )
+      @( posedge amm_if_v.clk );
+      amm_if_v.readdatavalid <= 1'b0;
+      if( rd_data_channel.size() >= DATA_B_W )
         begin
           for( int i = 0; i < DATA_B_W; i++ )
             amm_if_v.readdata[7 + 8*i -: 8] <= rd_data_channel.pop_front();
@@ -222,9 +230,7 @@ local task automatic send_data();
             end
           else
             amm_if_v.readdatavalid <= 1'b1;
-          @( posedge amm_if_v.clk );
         end
-      amm_if_v.readdatavalid <= 1'b0;
     end
 endtask : send_data
 

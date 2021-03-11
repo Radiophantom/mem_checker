@@ -48,7 +48,7 @@ logic         [15 : 0]    cmd_cnt;
 test_mode_t               test_mode;
 
 logic                     last_transaction;
-logic                     finish_flag;
+logic  [1 : 0]                   finish_flag;
 
 logic                     last_transaction_stb;
 logic                     cmd_accepted_stb;
@@ -58,7 +58,7 @@ logic                     trans_en_state;
 logic                     cnt_en_state;
 logic                     finish_state;
 
-enum logic [2:0] {
+enum logic [3:0] {
   IDLE_S,
   LOAD_S,
   WRITE_ONLY_S,
@@ -66,6 +66,7 @@ enum logic [2:0] {
   WRITE_WORD_S,
   READ_WORD_S,
   END_TEST_S,
+  SAVE_S,
   ERROR_CHECK_S
 } state, next_state;
 
@@ -127,13 +128,19 @@ always_comb
 
       END_TEST_S :
         begin
-          if( finish_flag )
-            next_state = IDLE_S;
+          if( &finish_flag )
+            next_state = SAVE_S;
         end
 
       ERROR_CHECK_S :
         begin
-          if( finish_flag )
+          if( &finish_flag )
+            next_state = SAVE_S;
+        end
+
+      SAVE_S :
+        begin
+          if( &finish_flag )
             next_state = IDLE_S;
         end
 
@@ -200,7 +207,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( test_start_i )
       test_finished_o <= 1'b0;
     else
-      if( finish_state && finish_flag )
+      if( finish_state && ( &finish_flag ) )
         test_finished_o <= 1'b1;
 
 always_ff @( posedge clk_i )
@@ -210,17 +217,23 @@ always_ff @( posedge clk_i )
     if( cmp_error_i )
       test_result_o <= 1'b1;
 
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    finish_flag <= 2'b00;
+  else
+    finish_flag <= { finish_flag[0], ( ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i ) ) };
+
 assign trans_en_state       = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S ) ||
                               ( state == WRITE_WORD_S ) || ( state == READ_WORD_S );
 
 assign cnt_en_state         = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S ) ||
                               ( state == READ_WORD_S  ); 
 
-assign finish_state         = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
+assign finish_state         = ( state == SAVE_S );//END_TEST_S   ) || ( state == ERROR_CHECK_S );
 
 assign next_addr_stb        = ( state == LOAD_S       ) || ( cnt_en_state && cmd_accepted_stb );
 
-assign finish_flag          = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
+// assign finish_flag          = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
 
 assign test_count           = test_param_i[CSR_TEST_PARAM][31 : 16];
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );

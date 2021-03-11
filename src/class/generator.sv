@@ -25,7 +25,7 @@ task automatic run();
           rnd_scen_obj = new();
           rnd_scen_obj.set_test_mode_probability();
           rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
+          rnd_scen_obj.set_err_probability(80);
           void'( rnd_scen_obj.randomize() );
           gen2driv_mbx.put( rnd_scen_obj );
           gen2mem_mbx.put ( rnd_scen_obj );

@@ -264,7 +264,7 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( pipe_stage_en[1] )
-    check_error <= ( &check_vector_result );
+    check_error <= ( |check_vector_result );
   else
     check_error <= 1'b0;
 

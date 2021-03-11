@@ -27,17 +27,6 @@ mailbox mon2scb_mbx;
 event test_started;
 event test_finished;
 
-// virtual amm_if #(
-//   .ADDR_W ( 4 ),
-//   .DATA_W ( 32 )
-// ) amm_if_csr;
-
-// virtual amm_if #(
-//   .ADDR_W   ( AMM_ADDR_W  ),
-//   .DATA_W   ( AMM_DATA_W  ),
-//   .BURST_W  ( AMM_BURST_W )
-// ) amm_if_mem;
-
 function new(
   virtual amm_if #(
     .ADDR_W ( 4 ),
@@ -49,9 +38,7 @@ function new(
     .BURST_W  ( AMM_BURST_W )
   ) amm_if_mem
 );
-  // this.amm_if_csr = amm_if_csr;
-  // this.amm_if_mem = amm_if_mem;
-  gen2driv_mbx      = new( 1 );
+  gen2driv_mbx      = new();
   gen2mem_mbx       = new();
   driv2scb_test_mbx = new();
   driv2scb_stat_mbx = new();
