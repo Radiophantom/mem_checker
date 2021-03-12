@@ -21,7 +21,7 @@ module measure_block(
   output logic  [CSR_RD_REQ : CSR_WR_TICKS][31 : 0]   meas_result_o
 );
 
-localparam int PIPE_W   = 16; // must be power of 2
+localparam int PIPE_W   = 8; // must be power of 2
 localparam int CNT_NUM  = 4; // amount of cnt for concurrent read delay count
 localparam int CNT_W    = $clog2( CNT_NUM );
 
@@ -218,7 +218,7 @@ generate
       else
         begin
           //----------------------------------------------------------------------------------
-          localparam int SUM_W = $clog( DATA_B_W ) + 1;
+          localparam int SUM_W = $clog2( DATA_B_W ) + 1;
 
           logic [SUM_W - 1 : 0] bytes_amount;
           logic                 wr_stb_delayed;

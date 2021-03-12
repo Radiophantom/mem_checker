@@ -7,3 +7,5 @@ vlog -sv -f tb_files
 vsim -voptargs="+acc" mem_checker_tb
 
 do wave.do
+
+run -all

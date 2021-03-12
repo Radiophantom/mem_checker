@@ -8,7 +8,7 @@ int depth;
 
 function automatic void set_edge( int right_edge );
   this.right_edge = right_edge;
-  depth = $ceil( ( right_edge + 1 ) / 4 ); //double'
+  depth = $ceil( ( right_edge + 1 ) / 8 );
 endfunction : set_edge
 
 function automatic int get_value();

@@ -90,7 +90,7 @@ logic                                           lock_error_stb;
 
 logic                                           data_gen_bit;
 
-mask_t                                          mask_struct;
+// mask_t                                          mask_struct;
 
 enum logic [2 : 0] {
   IDLE_S,
@@ -156,13 +156,13 @@ generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
 
-      always_ff @( posedge clk_i )
-        if( state == CALC_MASK_S )
-          begin
-            mask_struct.first   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
-            mask_struct.last    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
-            mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
-          end
+      // always_ff @( posedge clk_i )
+      //   if( state == CALC_MASK_S )
+      //     begin
+      //       mask_struct.start   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
+      //       mask_struct.finish    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
+      //       mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
+      //     end
 
       always_ff @( posedge clk_i )
         if( state == CALC_MASK_S )
@@ -181,13 +181,13 @@ generate
       always_ff @( posedge clk_i )
         if( state == LOAD_S )
           if( last_word )
-            check_ptrn <= mask_struct.merged;
+            check_ptrn <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
           else
-            check_ptrn <= mask_struct.first;
+            check_ptrn <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
         else
           if( pipe_stage_en[0] )
             if( last_word )
-              check_ptrn <= mask_struct.last;
+              check_ptrn <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
             else
               check_ptrn <= '1;
 
@@ -269,12 +269,17 @@ always_ff @( posedge clk_i )
     check_error <= 1'b0;
 
 always_comb
-  for( int i = 0; i < DATA_B_W / 16; i++ )
-    begin
-      err_byte_num = 0;
+  begin
+    err_byte_num = 0;
+    for( int i = 0; i < DATA_B_W / 16; i++ )
       if( err_byte_flag[i] )
-        err_byte_num = err_byte_num_arr[i];
-    end
+        begin
+          err_byte_num = err_byte_num + err_byte_num_arr[i];
+          break;
+        end
+      else
+        err_byte_num = err_byte_num + 5'd16;
+  end
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
@@ -282,7 +287,7 @@ always_ff @( posedge clk_i )
 
 always_ff @( posedge clk_i )
   if( lock_error_stb )
-    err_result_o[CSR_ERR_DATA] <= { err_byte, check_data_ptrn[1] };
+    err_result_o[CSR_ERR_DATA] <= { check_data_ptrn[1], err_byte };
 
 always_ff @( posedge clk_i )
   if( test_start_i )
@@ -290,6 +295,8 @@ always_ff @( posedge clk_i )
   else
     if( check_error )
       cmp_error_o <= 1'b1;
+    else
+      cmp_error_o <= 1'b0;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -304,7 +311,7 @@ always_ff @( posedge clk_i, posedge rst_i )
 assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
 assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
 
-assign err_byte         = check_readdata[1][err_byte_num_arr];
+assign err_byte         = check_readdata[1][err_byte_num];
 assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
 
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );

@@ -4,7 +4,8 @@ class generator;
 
 typedef class random_scenario;
 
-random_scenario rnd_scen_obj;
+random_scenario rnd_scen_driv_obj;
+random_scenario rnd_scen_mem_obj;
 
 mailbox   gen2driv_mbx;
 mailbox   gen2mem_mbx;
@@ -22,73 +23,80 @@ task automatic run();
     begin
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability();
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability(80);
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability();
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(0, 0, 100);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(0, 0, 100);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(0, 100, 0);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(0, 100, 0);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(100, 0, 0);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(100, 0, 0);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(50, 25, 25);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(50, 25, 25);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(25, 50, 25);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(25, 50, 25);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
       repeat( 500 )
         begin
-          rnd_scen_obj = new();
-          rnd_scen_obj.set_test_mode_probability(25, 25, 50);
-          rnd_scen_obj.set_addr_mode_probability();
-          rnd_scen_obj.set_err_probability();
-          void'( rnd_scen_obj.randomize() );
-          gen2driv_mbx.put( rnd_scen_obj );
-          gen2mem_mbx.put ( rnd_scen_obj );
+          rnd_scen_driv_obj = new();
+          rnd_scen_driv_obj.set_test_mode_probability(25, 25, 50);
+          rnd_scen_driv_obj.set_addr_mode_probability();
+          rnd_scen_driv_obj.set_err_probability();
+          void'( rnd_scen_driv_obj.randomize() );
+          rnd_scen_mem_obj = new rnd_scen_driv_obj;
+          gen2driv_mbx.put( rnd_scen_driv_obj );
+          gen2mem_mbx.put ( rnd_scen_mem_obj );
         end
     end
   join_none

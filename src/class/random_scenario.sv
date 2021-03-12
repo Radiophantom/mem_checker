@@ -7,10 +7,10 @@ class random_scenario;
 
 bathtube_distribution bath_dist_obj;
 
-localparam int MAX_BURST_VAL      = ( 2**( AMM_BURST_W - 1 ) );
+localparam int MAX_BURST_VAL = 2**( AMM_BURST_W - 1 );
 
-bit [CSR_ERR_DATA : CSR_TEST_RESULT][31 : 0] test_result_registers;
-bit [CSR_SET_DATA :  CSR_TEST_PARAM][31 : 0] test_param_registers;
+bit [31 : 0]  test_result_registers [CSR_ERR_DATA : CSR_TEST_RESULT];
+bit [31 : 0]  test_param_registers  [CSR_SET_DATA :  CSR_TEST_PARAM];
 
 int max_burst_byte_val; 
 
@@ -42,7 +42,7 @@ rand  bit   [7  : 0]            data_ptrn;
 constraint base_constraints {
   burstcount    <  MAX_BURST_VAL;
   trans_amount  <  2**5;
-  err_trans_num <=  trans_amount;
+  err_trans_num <= trans_amount;
 }
 
 constraint test_mode_constraint {
@@ -109,12 +109,16 @@ function automatic void set_err_probability(
 endfunction : set_err_probability
 
 function automatic void prep_test_param();
-  test_param_registers[CSR_TEST_PARAM]  = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
-  test_param_registers[CSR_SET_ADDR  ]  = addr_ptrn;
-  test_param_registers[CSR_SET_DATA  ]  = data_ptrn;
+  test_param_registers[CSR_TEST_PARAM] = { trans_amount, test_mode, addr_mode, data_mode, burstcount };
+  test_param_registers[CSR_SET_ADDR  ] = addr_ptrn;
+  test_param_registers[CSR_SET_DATA  ] = data_ptrn;
 endfunction : prep_test_param
 
-function automatic void err_byte_num_set();	
+function automatic void err_byte_num_set();
+  if( ADDR_TYPE == "BYTE" )
+    max_burst_byte_val = ( burstcount                        );
+  else
+    max_burst_byte_val = ( ( burstcount + 1 ) * DATA_B_W - 1 );	
   bath_dist_obj = new();
   bath_dist_obj.set_edge( max_burst_byte_val );
   err_byte_num  = bath_dist_obj.get_value();
@@ -123,14 +127,7 @@ endfunction : err_byte_num_set
 
 function automatic void post_randomize();
   prep_test_param();
-  if( err_enable )
-	  begin
-		  if( ADDR_TYPE == "BYTE" )
-		  	max_burst_byte_val = ( burstcount											   );
-		  else
-		  	max_burst_byte_val = ( ( burstcount + 1 ) * DATA_B_W - 1 );
-		  err_byte_num_set();
-		end
+  err_byte_num_set();
 endfunction : post_randomize
 
 endclass : random_scenario

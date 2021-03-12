@@ -29,6 +29,8 @@ function new(
   this.mon2scb_mbx        = mon2scb_mbx;
 endfunction
 
+real wr_speed;
+
 task automatic run();
   fork
     begin
@@ -45,15 +47,16 @@ task automatic run();
                 begin
                   if( received_scen.test_result_registers[CSR_ERR_ADDR] != reference_scen.test_result_registers[CSR_ERR_ADDR] )
                     begin
-                      $display( "Expected error address : %0d", reference_scen.test_result_registers[CSR_ERR_ADDR] );
-                      $display( "Observed error address : %0d", received_scen.test_result_registers [CSR_ERR_ADDR] );
+                      $display( "Expected error address : %h", reference_scen.test_result_registers[CSR_ERR_ADDR] );
+                      $display( "Observed error address : %h", received_scen.test_result_registers [CSR_ERR_ADDR] );
+                      $stop();
                     end
                   if( received_scen.test_result_registers[CSR_ERR_DATA] != reference_scen.test_result_registers[CSR_ERR_DATA] )
                     begin
-                      $display( "Expected data error address :/n /t correct data =  %h; corrupted data =  %h", reference_scen.test_result_registers[CSR_ERR_ADDR][15 : 8], reference_scen.test_result_registers[CSR_ERR_ADDR][7 : 0] );
-                      $display( "Observed data error address :/n /t correct data =  %h; corrupted data =  %h", received_scen.test_result_registers [CSR_ERR_ADDR][15 : 8], received_scen.test_result_registers [CSR_ERR_ADDR][7 : 0] );
+                      $display( "Expected data error address : correct data =  %h; corrupted data =  %h", reference_scen.test_result_registers[CSR_ERR_DATA][15 : 8], reference_scen.test_result_registers[CSR_ERR_DATA][7 : 0] );
+                      $display( "Observed data error address : correct data =  %h; corrupted data =  %h", received_scen.test_result_registers [CSR_ERR_DATA][15 : 8], received_scen.test_result_registers [CSR_ERR_DATA][7 : 0] );
+                      $stop();
                     end
-                  $stop();
                 end
             end
           else
@@ -79,6 +82,11 @@ task automatic run();
                 $display( "Observed %0d register value : %0d", i, received_stat.stat_registers [i] );
                 $stop();
               end
+
+          wr_speed = ( received_stat.stat_registers[CSR_WR_UNITS] * 8 ) / ( received_stat.stat_registers[CSR_WR_TICKS] * 8 ) * 10**3;
+          $display( "Write speed (average) : %0.0f Mb/s", wr_speed );
+          // if( wr_speed > 10_000 )
+          //   $stop();
 
           test_amount--;
         end

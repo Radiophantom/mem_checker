@@ -123,10 +123,10 @@ generate
           else
             burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
         else
-          if( storage_burst_en && low_burst_en )
-            burstcount_exp = (AMM_BURST_W - 1)'( 1 );
+          if( low_burst_en )
+            burstcount_exp = (AMM_BURST_W - 2)'( 1 );
           else
-            burstcount_exp = (AMM_BURST_W - 1)'( 0 );
+            burstcount_exp = (AMM_BURST_W - 2)'( 0 );
 
       always_ff @( posedge clk_i )
         if( start_stb )

@@ -8,5 +8,12 @@ parameter int RND_RVALID    = 0;
 
 parameter int DELAY_MEAN_VAL = 10;
 
+function automatic int start_offset(
+  bit [127 : 0] byteenable
+);
+  for( int i = 0; i < 127; i++ )
+    if( byteenable[i] )
+      return( i );
+endfunction : start_offset
 
 endpackage : tb_settings_pkg

@@ -95,13 +95,9 @@ endtask : start_test
 local task automatic save_test_result();
   stat_obj = new();
   for( int i = CSR_TEST_RESULT; i <= CSR_ERR_DATA; i++ )
-    begin
-      rd_word( i, rnd_scen_obj.test_result_registers[i] );
-    end
+    rd_word( i, rnd_scen_obj.test_result_registers[i] );
   for( int i = CSR_WR_TICKS; i <= CSR_RD_REQ; i++ )
-    begin
-      rd_word( i, stat_obj.stat_registers[i] );
-    end
+    rd_word( i, stat_obj.stat_registers[i] );
 endtask : save_test_result
 
 task automatic run();
