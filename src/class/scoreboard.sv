@@ -29,7 +29,7 @@ function new(
   this.mon2scb_mbx        = mon2scb_mbx;
 endfunction
 
-real wr_speed;
+// real wr_speed;
 
 task automatic run();
   fork
@@ -78,13 +78,14 @@ task automatic run();
           foreach( reference_stat.stat_registers[i] )
             if( reference_stat.stat_registers[i] != received_stat.stat_registers[i] )
               begin
-                $display( "Expected %0d register value : %0d", i, reference_stat.stat_registers[i] );
-                $display( "Observed %0d register value : %0d", i, received_stat.stat_registers [i] );
+                $display( "Expected %h register value : %h", i, reference_stat.stat_registers[i] );
+                $display( "Observed %h register value : %h", i, received_stat.stat_registers [i] );
                 $stop();
               end
 
-          wr_speed = ( received_stat.stat_registers[CSR_WR_UNITS] * 8 ) / ( received_stat.stat_registers[CSR_WR_TICKS] * 8 ) * 10**3;
-          $display( "Write speed (average) : %0.0f Mb/s", wr_speed );
+          // wr_speed = ( received_stat.stat_registers[CSR_WR_UNITS] * 8 ) / ( received_stat.stat_registers[CSR_WR_TICKS] * 8 ) * 10**3;
+          // wr_speed = ( received_stat.stat_registers[CSR_WR_UNITS] * 512 ) / ( received_stat.stat_registers[CSR_WR_TICKS] * 8 ) * 10**3;
+          // $display( "Write speed (average) : %0.0f Mb/s", wr_speed );
           // if( wr_speed > 10_000 )
           //   $stop();
 

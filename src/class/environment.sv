@@ -59,7 +59,7 @@ task automatic run();
   mon.run();
   scb.test_amount = 3500;
   scb.run();
-  wait( scb.test_amount == 0 );
+  // wait( scb.test_amount == 0 );
 endtask : run
 
 endclass : environment

@@ -54,11 +54,11 @@ local function automatic void init_interface();
   amm_if_v.write          = 1'b0;
   amm_if_v.readdatavalid  = 1'b0;
   amm_if_v.waitrequest    = 1'b0;
-  amm_if_v.readdata       = '0;
-  amm_if_v.address        = '0;
-  amm_if_v.writedata      = '0;
-  amm_if_v.byteenable     = '0;
-  amm_if_v.burstcount     = '0;
+  // amm_if_v.readdata       = '0;
+  // amm_if_v.address        = '0;
+  // amm_if_v.writedata      = '0;
+  // amm_if_v.byteenable     = '0;
+  // amm_if_v.burstcount     = '0;
 endfunction : init_interface
 
 local task automatic wr_mem(
@@ -85,21 +85,30 @@ local task automatic rd_mem(
   int           bytes_amount
 );
   int transaction_amount  = ( bytes_amount / MEM_DATA_B_W );
-  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL ) + 2; // "+ 2" because of delay to receive and process read transaction in memory chip
+  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL ) + MEM_DELAY; // "+ 2" because of delay to receive and process read transaction in memory chip
+ 
   repeat( delay_ticks )
     @( posedge amm_if_v.clk );
-  repeat( transaction_amount )
+  fork
     begin
-      @( posedge amm_if_v.clk );
-      repeat( MEM_DATA_B_W )
+      repeat( transaction_amount - MEM_DELAY )
+        @( posedge amm_if_v.clk );  // emulate pipeline behavior of DDR memory chip
+    end
+    begin
+      repeat( transaction_amount )
         begin
-          if( memory_array.exists( rd_addr ) )
-            rd_data_channel.push_back( memory_array[rd_addr] );
-          else
-            rd_data_channel.push_back( 8'h00 );
-          rd_addr++;
+          @( posedge amm_if_v.clk );
+          repeat( MEM_DATA_B_W )
+            begin
+              if( memory_array.exists( rd_addr ) )
+                rd_data_channel.push_back( memory_array[rd_addr] );
+              else
+                rd_data_channel.push_back( 8'h00 );
+              rd_addr++;
+            end
         end
     end
+  join_any
 endtask : rd_mem
 
 local task automatic scan_test_mbx();
@@ -137,6 +146,7 @@ local task automatic wr_data_collect(
     begin
       if( amm_if_v.write )
         begin
+          amm_if_v.waitrequest <= 1'b1;
           for( int i = 0; i < DATA_B_W; i++ )
             if( amm_if_v.byteenable[i] )
               begin
@@ -148,14 +158,15 @@ local task automatic wr_data_collect(
                 bytes_amount--;
                 byte_num++;
               end
-          amm_if_v.waitrequest <= 1'b1;
           if( wr_data_channel.size() > 3 * DATA_B_W )
             do
               @( posedge amm_if_v.clk );
             while( wr_data_channel.size() > DATA_B_W );
           if( RND_WAITREQ )
-            while( $urandom_range( 1 ) )
+            begin
+              while( $urandom_range( 1 ) )
               @( posedge amm_if_v.clk );
+            end
           amm_if_v.waitrequest <= 1'b0;
           if( bytes_amount )
             @( posedge amm_if_v.clk );
@@ -230,7 +241,7 @@ task automatic run();
         if( amm_if_v.write )
           wr_data();
         else
-          if( amm_if_v.read  )
+          if( amm_if_v.read )
             rd_data();
       end
   join_none

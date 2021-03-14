@@ -14,7 +14,6 @@ bit [31 : 0] rd_req_amount;
 
 int next_trans_id     = 0;
 int cur_trans_id      = 0;
-int words_amount_left = 0;
 
 typedef class statistics;
 
@@ -50,11 +49,11 @@ local function automatic void init_interface();
   amm_if_v.write          = 1'b0;
   amm_if_v.readdatavalid  = 1'b0;
   amm_if_v.waitrequest    = 1'b0;
-  amm_if_v.address        = '0;
-  amm_if_v.writedata      = '0;
-  amm_if_v.byteenable     = '0;
-  amm_if_v.burstcount     = '0;
-  amm_if_v.readdata       = '0;
+  // amm_if_v.address        = '0;
+  // amm_if_v.writedata      = '0;
+  // amm_if_v.byteenable     = '0;
+  // amm_if_v.burstcount     = '0;
+  // amm_if_v.readdata       = '0;
 endfunction : init_interface
 
 local function automatic void reset_stat();
@@ -79,19 +78,13 @@ local task automatic wr_ticks_count();
     end
 endtask : wr_ticks_count
 
-local function automatic int bytes_count();
-  foreach( amm_if_v.byteenable[i] )
-    if( amm_if_v.byteenable[i] )
-      bytes_count++;
-endfunction : bytes_count
-
 local task automatic wr_units_count();
   forever
     begin
       @( posedge amm_if_v.clk );
       if( amm_if_v.write && ( !amm_if_v.waitrequest ) )
         if( ADDR_TYPE == "BYTE" )
-          wr_units += bytes_count();
+          wr_units += bytes_count( amm_if_v.byteenable );
         else
           wr_units += 1;
     end
@@ -106,49 +99,7 @@ local task automatic rd_words_count();
     end
 endtask : rd_words_count
 
-// local task automatic rd_words_count();
-//   forever
-//     begin
-//       @( posedge amm_if_v.clk );
-//       if( amm_if_v.readdatavalid )
-//         begin
-//           rd_words++;
-//           words_amount_left--;
-//         end
-//     end
-// endtask : rd_words_count
-
 local task automatic rd_req_count();
-  forever
-    begin
-      @( posedge amm_if_v.clk );
-      if( amm_if_v.read )
-        begin
-          rd_req_amount++;
-          while( amm_if_v.waitrequest )
-            @( posedge amm_if_v.clk );
-        end 
-    end
-endtask : rd_req_count
-
-// local task automatic rd_req_count();
-//   forever
-//     begin
-//       @( posedge amm_if_v.clk );
-//       if( amm_if_v.read )
-//         begin
-//           fork
-//             delay_count( next_trans_id );
-//           join_none
-//           words_amount_left += amm_if_v.burstcount;
-//           rd_req_amount++;
-//           while( amm_if_v.waitrequest )
-//             @( posedge amm_if_v.clk );
-//         end 
-//     end
-// endtask : rd_req_count
-
-local task automatic rd_delay_count();
   forever
     begin
       @( posedge amm_if_v.clk );
@@ -157,11 +108,12 @@ local task automatic rd_delay_count();
           fork
             delay_count( next_trans_id );
           join_none
+          rd_req_amount++;
           while( amm_if_v.waitrequest )
             @( posedge amm_if_v.clk );
         end 
     end
-endtask : rd_delay_count
+endtask : rd_req_count
 
 local task automatic delay_count( int trans_id );
   int words_amount  = amm_if_v.burstcount;
@@ -225,7 +177,6 @@ task automatic run();
     rd_ticks_count();
     rd_words_count();
     rd_req_count  ();
-    rd_delay_count();
   join_none
 
   fork

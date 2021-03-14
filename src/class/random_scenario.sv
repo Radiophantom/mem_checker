@@ -116,7 +116,7 @@ endfunction : prep_test_param
 
 function automatic void err_byte_num_set();
   if( ADDR_TYPE == "BYTE" )
-    max_burst_byte_val = ( burstcount                        );
+    max_burst_byte_val = ( burstcount );
   else
     max_burst_byte_val = ( ( burstcount + 1 ) * DATA_B_W - 1 );	
   bath_dist_obj = new();
