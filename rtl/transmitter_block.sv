@@ -89,45 +89,50 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( last_transaction && !waitrequest_i )
         in_process <= 1'b0;
 
-logic [DATA_B_W - 1 : 0] start_mask;
-logic [DATA_B_W - 1 : 0] end_mask;
-
 generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
 
-      logic low_burst_en;
+      localparam int BURST_SUM_W = ( ( AMM_BURST_W - 1 ) > ADDR_B_W ) ? ( AMM_BURST_W   ):
+                                                                        ( ADDR_B_W + 1  );
+
+      logic                           low_bits_burst_en;
+      logic   [BURST_SUM_W - 1 : 0]   burst_units_sum;
+
+      always_comb
+        if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
+          burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] );
+        else
+          burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[AMM_BURST_W - 2 : 0] );
 
       always_ff @( posedge clk_i )
+        if( trans_valid_i && trans_ready_o )
+          begin
+            storage_burst_en  <= ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount  >= DATA_B_W );
+            low_bits_burst_en <= burst_units_sum[ADDR_B_W];
+          end
+
+      always_comb
+        if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
+          if( storage_burst_en && low_bits_burst_en )
+            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
+          else
+            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
+        else
+          if( low_bits_burst_en )
+            burstcount_exp = (AMM_BURST_W - 2)'( 1 );
+          else
+            burstcount_exp = (AMM_BURST_W - 2)'( 0 );
+
+     always_ff @( posedge clk_i )
         if( trans_valid_i && trans_ready_o )
           begin
             storage_struct.trans_type <= trans_type_i;
             storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
             storage_struct.end_off    <= ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount );
-            start_mask                <= byteenable_ptrn( 1'b1, trans_addr_i[ADDR_B_W - 1 : 0],  1'b0,  ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount ) );
-            end_mask                  <= byteenable_ptrn( 1'b0, trans_addr_i[ADDR_B_W - 1 : 0],  1'b1,  ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount ) );
           end
-
-      always_ff @( posedge clk_i )
-        if( trans_valid_i && trans_ready_o )
-          begin
-            storage_burst_en  <= ( ( burstcount + trans_addr_i[ADDR_B_W - 1 : 0] ) >= DATA_B_W );
-            low_burst_en      <= ( ADDR_B_W + 1 )'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] ) >> ADDR_B_W;
-          end
-
-      always_comb
-        if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
-          if( storage_burst_en && low_burst_en )
-            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
-          else
-            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
-        else
-          if( low_burst_en )
-            burstcount_exp = (AMM_BURST_W - 2)'( 1 );
-          else
-            burstcount_exp = (AMM_BURST_W - 2)'( 0 );
-
+      
       always_ff @( posedge clk_i )
         if( start_stb )
           burst_cnt <= burstcount_exp;
@@ -135,14 +140,9 @@ generate
           if( wr_unit_stb )
             burst_cnt <= burst_cnt - 1'b1;
 
-      logic [DATA_B_W - 1 : 0] cur_end_mask;
-
       always_ff @( posedge clk_i )
         if( start_stb )
-          begin
-            cur_struct.end_off  <= storage_struct.end_off;
-            cur_end_mask        <= end_mask;
-          end
+          cur_struct.end_off  <= storage_struct.end_off;
 
       always_comb
         begin
@@ -174,16 +174,9 @@ generate
             if( storage_struct.trans_type )
               byteenable_o <= '1;
             else
-              if( storage_burst_en )
-                byteenable_o <= start_mask;
-              else
-                byteenable_o <= ( start_mask & end_mask );
+              byteenable_o <= byteenable_ptrn( 1'b1, storage_struct.start_off,  ( !storage_burst_en ),  storage_struct.end_off );
           else
-            if( !last_transaction )
-              if( burst_cnt == 1 )
-                byteenable_o <= cur_end_mask;
-              else
-                byteenable_o <= '1;
+            byteenable_o <= byteenable_ptrn( 1'b0, cur_struct.start_off,  ( burst_cnt == 1 ),  cur_struct.end_off );
 
     end
   else
@@ -284,7 +277,7 @@ assign burstcount           = test_param_i[CSR_TEST_PARAM][AMM_BURST_W - 2 : 0];
 assign data_mode            = data_mode_t'( test_param_i[CSR_TEST_PARAM][12]      );
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
-assign data_gen_bit         = ( rnd_data[6] ^ rnd_data[1] ^ rnd_data[0] );
+assign data_gen_bit         = ( rnd_data[7] ^ rnd_data[1] ^ 1'b1 );
 
 assign trans_busy_o         = ( in_process || storage_valid );
 

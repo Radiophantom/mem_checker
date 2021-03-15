@@ -89,26 +89,18 @@ local task automatic rd_mem(
  
   repeat( delay_ticks )
     @( posedge amm_if_v.clk );
-  fork
+  repeat( transaction_amount )
     begin
-      repeat( transaction_amount - MEM_DELAY )
-        @( posedge amm_if_v.clk );  // emulate pipeline behavior of DDR memory chip
-    end
-    begin
-      repeat( transaction_amount )
+      @( posedge amm_if_v.clk );
+      repeat( MEM_DATA_B_W )
         begin
-          @( posedge amm_if_v.clk );
-          repeat( MEM_DATA_B_W )
-            begin
-              if( memory_array.exists( rd_addr ) )
-                rd_data_channel.push_back( memory_array[rd_addr] );
-              else
-                rd_data_channel.push_back( 8'h00 );
-              rd_addr++;
-            end
+          if( memory_array.exists( rd_addr ) )
+            rd_data_channel.push_back( memory_array[rd_addr] );
+          else
+            rd_data_channel.push_back( 8'h00 );
+          rd_addr++;
         end
     end
-  join_any
 endtask : rd_mem
 
 local task automatic scan_test_mbx();

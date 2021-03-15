@@ -21,13 +21,14 @@ module measure_block(
   output logic  [CSR_RD_REQ : CSR_WR_TICKS][31 : 0]   meas_result_o
 );
 
-localparam int PIPE_W   = 8; // must be power of 2
+localparam int PIPE_W   = 16; // must be power of 2
 localparam int CNT_NUM  = 4; // amount of cnt for concurrent read delay count
 localparam int CNT_W    = $clog2( CNT_NUM );
 
 logic                 rd_req_flag;
 logic                 rd_req_stb;
 logic                 wr_unit_stb;
+logic                 rd_ticks_count_en;
 
 logic [1 : 0]         save_stb_delayed;
 
@@ -81,13 +82,19 @@ always_ff @( posedge clk_i, posedge rst_i )
       active_cnt_num <= active_cnt_num + 1'b1;
 
 always_ff @( posedge clk_i, posedge rst_i )
-  // if( rd_req_stb )
-  //   read_busy <= 1'b1;
-  // else
   if( rst_i )
     read_busy <= 1'b0;
   else
-    read_busy <= ( active_cnt_num != load_cnt_num );
+    if( rd_req_stb )
+      read_busy <= 1'b1;
+    else
+      read_busy <= ( active_cnt_num != load_cnt_num );
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    rd_ticks_count_en <= 1'b0;
+  else
+    rd_ticks_count_en <= ( active_cnt_num != load_cnt_num );
 
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
@@ -131,7 +138,7 @@ always_ff @( posedge clk_i )
   if( test_start_i )
     rd_ticks <= 32'( 0 );
   else
-    if( read_busy )
+    if( rd_ticks_count_en )
       rd_ticks <= rd_ticks + 1'b1;
 
 always_ff @( posedge clk_i )

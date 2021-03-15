@@ -21,11 +21,13 @@ module compare_block(
   output logic                                          cmp_busy_o
 );
 
-localparam int CMP_W      = $bits( cmp_struct_t             );
+localparam int CMP_W = $bits( cmp_struct_t );
 
-logic          [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
+logic   [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
+logic   [CMP_W - 1 : 0]                  cmp_fifo_q;
 
-logic   [CMP_W - 1      : 0]                    cmp_fifo_q;
+logic                                    rd_data_fifo, data_fifo_empty;
+logic                                    rd_cmp_fifo,  cmp_fifo_empty;
 
 fifo #(
   .AWIDTH   ( 2               ),
@@ -81,9 +83,6 @@ logic                                           last_word;
 logic   [1 : 0]                                 pipe_stage_en;
 logic   [1 : 0][7 : 0]                          check_data_ptrn;
 logic   [1 : 0][CMP_ADDR_W - 1 : 0]             check_addr;
-
-//logic                                           rd_data_fifo, data_fifo_empty;
-//logic                                           rd_cmp_fifo,  cmp_fifo_empty;
 
 logic                                           check_error;
 logic                                           lock_error_stb;
@@ -268,19 +267,6 @@ always_ff @( posedge clk_i )
   else
     check_error <= 1'b0;
 
-always_comb
-  begin
-    err_byte_num = 0;
-    for( int i = 0; i < DATA_B_W / 16; i++ )
-      if( err_byte_flag[i] )
-        begin
-          err_byte_num = err_byte_num + err_byte_num_arr[i];
-          break;
-        end
-      else
-        err_byte_num = err_byte_num + 5'd16;
-  end
-
 always_ff @( posedge clk_i )
   if( lock_error_stb )
     err_result_o[CSR_ERR_ADDR] <= { check_addr[1], err_byte_num };
@@ -317,5 +303,7 @@ assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
 
 assign lock_error_stb   = check_error && ( !cmp_error_o );
+
+assign  err_byte_num    = { err_byte_find( err_byte_flag ), err_byte_num_arr[err_byte_find( err_byte_flag )] };
 
 endmodule : compare_block

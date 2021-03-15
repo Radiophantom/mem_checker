@@ -6,7 +6,7 @@ parameter int     MEM_DATA_B_W  = ( MEM_DATA_W / 8 );
 
 parameter int     AMM_ADDR_W    = 32;
 parameter int     AMM_DATA_W    = 512; // max value 512 - 200 MHz; max value 1024 - 170 MHz;
-parameter int     AMM_BURST_W   = 9;  // max value 11
+parameter int     AMM_BURST_W   = 6;  // max value 11
 
 parameter int     DATA_B_W      = ( AMM_DATA_W / 8 );
 parameter int     ADDR_B_W      = $clog2( DATA_B_W );
@@ -19,9 +19,6 @@ parameter int     ADDR_W        = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog
 parameter int     CMP_ADDR_W    = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
                                                             ( ADDR_W            );
 
-parameter int     RND_ADDR_W    = ( ADDR_W <= 8 ) ? ( 8                         ): //how can i do it simplier
-                                                    ( ( ADDR_W <= 16 ) ? ( 16 ):
-                                                                         ( 32 ) );
 
 parameter int CSR_TEST_START  = 0;
 parameter int CSR_TEST_PARAM  = 1;

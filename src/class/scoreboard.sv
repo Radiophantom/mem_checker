@@ -78,8 +78,8 @@ task automatic run();
           foreach( reference_stat.stat_registers[i] )
             if( reference_stat.stat_registers[i] != received_stat.stat_registers[i] )
               begin
-                $display( "Expected %h register value : %h", i, reference_stat.stat_registers[i] );
-                $display( "Observed %h register value : %h", i, received_stat.stat_registers [i] );
+                $display( "Expected %d register value : %h", i, reference_stat.stat_registers[i] );
+                $display( "Observed %d register value : %h", i, received_stat.stat_registers [i] );
                 $stop();
               end
 
