@@ -41,7 +41,7 @@ rand  bit   [7  : 0]            data_ptrn;
 
 constraint base_constraints {
   burstcount    <  MAX_BURST_VAL;
-  trans_amount  <  2**5;
+  trans_amount  <  2**8;
   err_trans_num <= trans_amount;
 }
 
