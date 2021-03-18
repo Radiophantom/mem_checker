@@ -1,13 +1,13 @@
 package tb_settings_pkg;
 
-parameter int CLK_SYS_T = 10_000;
-parameter int CLK_MEM_T = 8_000;
+parameter int CLK_SYS_T 			= 10_000;
+parameter int CLK_MEM_T 			= 8_000;
 
-parameter int RND_WAITREQ   = 0;
-parameter int RND_RVALID    = 0;
+parameter int RND_WAITREQ   	= 0;
+parameter int RND_RVALID    	= 0;
 
-parameter int DELAY_MEAN_VAL	= 10;
-parameter int MEM_DELAY 	 		= 2;
+parameter int DELAY_MEAN_VAL  = 10;
+parameter int MEM_DELAY 	  	= 2;
 
 function automatic int start_offset(
   bit [127 : 0] byteenable
@@ -16,12 +16,5 @@ function automatic int start_offset(
     if( byteenable[i] )
       return( i );
 endfunction : start_offset
-
-// function automatic int bytes_count(
-//   bit [127 : 0] byteenable
-// );
-//   foreach( byteenable[i] )
-//     bytes_count += byteenable[i];
-// endfunction : bytes_count
 
 endpackage : tb_settings_pkg

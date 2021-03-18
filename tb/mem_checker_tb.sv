@@ -1,4 +1,4 @@
-`include "./src/class/environment.sv"
+`include "environment.sv"
 
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;

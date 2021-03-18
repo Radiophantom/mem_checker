@@ -99,11 +99,26 @@ generate
       logic                           low_bits_burst_en;
       logic   [BURST_SUM_W - 1 : 0]   burst_units_sum;
 
-      always_comb
-        if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
-          burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] );
-        else
-          burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[AMM_BURST_W - 2 : 0] );
+      if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
+        begin
+          assign burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] );
+
+          always_comb
+            if( storage_burst_en && low_bits_burst_en )
+              burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
+            else
+              burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
+        end
+      else
+        begin
+          assign burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[AMM_BURST_W - 2 : 0] );
+
+          always_comb
+            if( low_bits_burst_en )
+              burstcount_exp = (AMM_BURST_W - 2)'( 1 );
+            else
+              burstcount_exp = (AMM_BURST_W - 2)'( 0 );
+        end
 
       always_ff @( posedge clk_i )
         if( trans_valid_i && trans_ready_o )
@@ -111,18 +126,6 @@ generate
             storage_burst_en  <= ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount  >= DATA_B_W );
             low_bits_burst_en <= burst_units_sum[ADDR_B_W];
           end
-
-      always_comb
-        if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
-          if( storage_burst_en && low_bits_burst_en )
-            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
-          else
-            burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W]         );
-        else
-          if( low_bits_burst_en )
-            burstcount_exp = (AMM_BURST_W - 2)'( 1 );
-          else
-            burstcount_exp = (AMM_BURST_W - 2)'( 0 );
 
      always_ff @( posedge clk_i )
         if( trans_valid_i && trans_ready_o )
@@ -159,10 +162,7 @@ generate
 
       always_ff @( posedge clk_i )
         if( start_stb )
-          if( storage_struct.trans_type )
-            burstcount_o <= burstcount_exp + 1'b1;
-          else
-            burstcount_o <= burstcount     + 1'b1;
+          burstcount_o <= burstcount_exp + 1'b1;
 
       always_ff @( posedge clk_i )
         if( start_stb )

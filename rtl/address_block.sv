@@ -12,9 +12,18 @@ module address_block(
   output logic  [ADDR_W - 1 : 0]                          next_addr_o
 );
 
-localparam RND_ADDR_W = ( ADDR_W <= 8 ) ? ( 8                         ): //how can i do it simplier
-                                          ( ( ADDR_W <= 16 ) ? ( 16 ):
-                                                               ( 32 ) );
+function automatic int addr_width_calc( int addr_width );
+  if( addr_width <= 8 )
+    return( 8 );
+  else
+    if( addr_width <= 16 )
+      return( 16 );
+    else
+      if( addr_width <= 32 )
+        return( 32 );
+endfunction : addr_width_calc
+
+localparam RND_ADDR_W = addr_width_calc( ADDR_W );
 
 addr_mode_t                       addr_mode;
 
@@ -33,17 +42,17 @@ logic       [RND_ADDR_W - 1 : 0]  rnd_addr = '1;
 logic                             rnd_gen_bit;
 
 generate
-  if( ADDR_W <= 8 )
+  if( RND_ADDR_W == 8 )
     begin
       assign rnd_gen_bit = ( rnd_addr[7] ^ rnd_addr[1] ^ 1'b1 );
     end
   else
-    if( ADDR_W <= 16 )
+    if( RND_ADDR_W == 16 )
       begin
         assign rnd_gen_bit = ( rnd_addr[15] ^ rnd_addr[1] ^ 1'b1 );
       end
     else
-      if( ADDR_W <= 32 )
+      if( RND_ADDR_W == 32 )
         begin
           assign rnd_gen_bit = ( rnd_addr[31] ^ rnd_addr[3] ^ 1'b1 );
         end
