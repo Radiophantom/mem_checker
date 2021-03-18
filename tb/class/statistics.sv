@@ -18,7 +18,7 @@ bit [31 : 0] stat_registers [CSR_RD_REQ : CSR_WR_TICKS];
 
 function new();
 	// initialize minimum delay register with maximum value
-	stat_registers[CSR_MIN_DEL] = '1;
+	stat_registers[CSR_MIN_DEL] = 16'hFF_FF;
 endfunction : new
 
 //*****************************

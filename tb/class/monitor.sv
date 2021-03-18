@@ -106,7 +106,7 @@ local task automatic rd_delay_stat_gather();
           fork
             delay_count( next_trans_id );
           join_none
-          stat_obj.rd_req_amount_count();
+          stat_obj.rd_req_count();
           // wait for read request accepting
           while( amm_if_v.waitrequest )
             @( posedge amm_if_v.clk );
@@ -127,12 +127,12 @@ local task automatic delay_count( int trans_id );
   next_trans_id++;
 
   fork
-    while( !( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) ) )
+    while( 1 )
       begin
         @( posedge amm_if_v.clk );
         delay_cnt++;
-        // if( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) )
-          // break;
+        if( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) )
+          break;
       end
   join_none
 
@@ -147,7 +147,7 @@ local task automatic delay_count( int trans_id );
   #0;
   cur_trans_id++;
 
-  stat_obj.delay_count( delay );
+  stat_obj.rd_delay_count( delay_cnt );
 endtask : delay_count
 
 //******************************

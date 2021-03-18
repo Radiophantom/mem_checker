@@ -1,18 +1,15 @@
+//*************
+// Class emulates behavior of memory controller. Insert error, if need, and send error address and corrupted data to 'scoreboard' class.
+//***************
+
 import rtl_settings_pkg::*;
 import tb_settings_pkg::*;
 
 class amm_memory;
 
-bit [7 : 0] memory_array    [*];
-bit [7 : 0] rd_data_channel [$];
-bit [7 : 0] wr_data_channel [$];
-
-int insert_error;
-int cur_trans_num;
-int err_trans_num;
-int err_byte_num;
-
-int seed = 0;
+//****************************************************
+// Class variables, objects and interface declaration
+//****************************************************
 
 typedef class random_scenario;
 
@@ -24,11 +21,37 @@ mailbox mem2scb_mbx;
 event test_started;
 event test_finished;
 
+// need to control write daemons executing order
+semaphore write_in_process = new( 1 );
+
+bit [7 : 0] memory_array    [*];
+bit [7 : 0] rd_data_channel [$];
+bit [7 : 0] wr_data_channel [$];
+
+// save data stream with respective byteenable mask
+typedef struct{
+  bit [DATA_B_W - 1   : 0]  byteenable;
+  bit [AMM_DATA_W - 1 : 0]  writedata;
+} wr_data_t;
+
+wr_data_t amm_data_channel [$];
+
+int insert_error;
+int cur_trans_num;
+int err_trans_num;
+int err_byte_num;
+
+int seed = 0;
+
 virtual amm_if #(
   .ADDR_W   ( AMM_ADDR_W  ),
   .DATA_W   ( AMM_DATA_W  ),
   .BURST_W  ( AMM_BURST_W )
 ) amm_if_v;
+
+//****************************************************
+// Class allocating and interface initialization
+//****************************************************
 
 function new(
   virtual amm_if #(
@@ -54,38 +77,118 @@ local function automatic void init_interface();
   amm_if_v.write          = 1'b0;
   amm_if_v.readdatavalid  = 1'b0;
   amm_if_v.waitrequest    = 1'b0;
-  // amm_if_v.readdata       = '0;
-  // amm_if_v.address        = '0;
-  // amm_if_v.writedata      = '0;
-  // amm_if_v.byteenable     = '0;
-  // amm_if_v.burstcount     = '0;
+  amm_if_v.readdata       = '0;
+  amm_if_v.address        = '0;
+  amm_if_v.writedata      = '0;
+  amm_if_v.burstcount     = '0;
+//amm_if_v.byteenable     = '0;
 endfunction : init_interface
 
-local task automatic wr_mem(
+//****************************************************
+// Write transaction tasks
+//****************************************************
+
+local task automatic prep_wr_data(
   int unsigned  wr_addr,
-  int           bytes_amount
+  int           trans_amount
 );
-  fork
-    while( bytes_amount )
-      begin
-        @( posedge amm_if_v.clk );
-        repeat( MEM_DATA_B_W )
-          if( wr_data_channel.size() && bytes_amount )
-            begin
-              memory_array[wr_addr] = wr_data_channel.pop_front();
-              wr_addr++;
-              bytes_amount--;
-            end
-      end
+  wr_data_t wr_data;
+  int       byte_num = 0;
+  bit [7 : 0] wr_byte;
+
+  write_in_process.get();
+  fork : wr_mem_daemon_fork
+    wr_mem( wr_addr );
   join_none
+  repeat( trans_amount )
+    begin
+      wait( amm_data_channel.size() > 0 );
+      wr_data = amm_data_channel.pop_front();
+      for( int i = 0; i < DATA_B_W; i++ )
+        begin
+          if( wr_data.byteenable[i] )
+            begin
+              if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
+                wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
+              else
+                wr_byte = wr_data.writedata[7 + i * 8 -: 8];
+              wr_data_channel.push_back( wr_byte );
+              byte_num++;
+            end
+        end
+      wait( wr_data_channel.size() <= 3 * DATA_B_W );
+    end
+  wait( wr_data_channel.size() == 0 );
+  disable wr_mem_daemon_fork;
+  write_in_process.put();
+  cur_trans_num++;
+endtask : prep_wr_data
+
+local task automatic wr_mem(
+  int unsigned  wr_addr
+);
+  forever
+    begin
+      @( posedge amm_if_v.clk );
+      repeat( MEM_DATA_B_W )
+        if( wr_data_channel.size() )
+          begin
+            memory_array[wr_addr] = wr_data_channel.pop_front();
+            wr_addr++;
+          end
+    end
 endtask : wr_mem
+
+local task automatic wr_data();
+  int unsigned  wr_addr;
+  int           trans_amount;
+  wr_data_t     wr_data;
+
+  if( ADDR_TYPE == "BYTE" )
+    wr_addr = amm_if_v.address + start_offset( amm_if_v.byteenable );
+  else
+    wr_addr = amm_if_v.address * DATA_B_W;
+  trans_amount  = amm_if_v.burstcount;
+
+  fork
+    prep_wr_data( wr_addr, trans_amount );
+  join_none
+
+  while( trans_amount )
+    begin
+      if( amm_if_v.write )
+        begin
+          amm_if_v.waitrequest <= 1'b1;
+          wr_data.byteenable = amm_if_v.byteenable;
+          wr_data.writedata  = amm_if_v.writedata;
+          amm_data_channel.push_back( wr_data );
+          while( amm_data_channel.size() > 1 );
+            @( posedge amm_if_v.clk );
+          if( RND_WAITREQ )
+            begin
+              while( $urandom_range( 1 ) )
+                @( posedge amm_if_v.clk );
+            end
+          amm_if_v.waitrequest <= 1'b0;
+          if( trans_amount > 1 )
+            @( posedge amm_if_v.clk );
+          trans_amount--;
+        end
+      else
+        @( posedge amm_if_v.clk );
+    end
+endtask : wr_data
+
+//****************************************************
+// Read transaction tasks
+//****************************************************
 
 local task automatic rd_mem(
   int unsigned  rd_addr,
   int           bytes_amount
 );
   int transaction_amount  = ( bytes_amount / MEM_DATA_B_W );
-  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL ) + MEM_DELAY; // "+ 2" because of delay to receive and process read transaction in memory chip
+  int delay_ticks         = $dist_poisson( seed, DELAY_MEAN_VAL ) + MEM_DELAY; // "+ MEM_DELAY" because of delay to receive and process read transaction in memory chip
  
   repeat( delay_ticks )
     @( posedge amm_if_v.clk );
@@ -102,90 +205,6 @@ local task automatic rd_mem(
         end
     end
 endtask : rd_mem
-
-local task automatic scan_test_mbx();
-  forever
-    begin
-      @( test_started );
-      gen2mem_mbx.get( rnd_scen_obj );
-      insert_error  = rnd_scen_obj.err_enable;
-      err_trans_num = rnd_scen_obj.err_trans_num;
-      err_byte_num  = rnd_scen_obj.err_byte_num;
-      cur_trans_num = 0;
-      @( test_finished );
-      mem2scb_mbx.put( rnd_scen_obj );
-    end
-endtask : scan_test_mbx
-
-local function automatic bit [7 : 0] corrupt_data(
-  int unsigned          wr_addr,        
-  bit           [7 : 0] wr_data
-);
-  corrupt_data = ( ~wr_data );
-  rnd_scen_obj.test_result_registers[CSR_TEST_RESULT] = 32'( 1 );
-  rnd_scen_obj.test_result_registers[CSR_ERR_ADDR   ] = ( wr_addr + err_byte_num );
-  rnd_scen_obj.test_result_registers[CSR_ERR_DATA   ] = { wr_data, corrupt_data };
-endfunction : corrupt_data
-
-local task automatic wr_data_collect(
-  int unsigned wr_addr,
-  int bytes_amount
-);
-  int         byte_num = 0;
-  bit [7 : 0] wr_byte;
-
-  while( bytes_amount )
-    begin
-      if( amm_if_v.write )
-        begin
-          amm_if_v.waitrequest <= 1'b1;
-          for( int i = 0; i < DATA_B_W; i++ )
-            if( amm_if_v.byteenable[i] )
-              begin
-                if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
-                  wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
-                else
-                  wr_byte = amm_if_v.writedata[7 + i * 8 -: 8];
-                wr_data_channel.push_back( wr_byte );
-                bytes_amount--;
-                byte_num++;
-              end
-          if( wr_data_channel.size() > 3 * DATA_B_W )
-            do
-              @( posedge amm_if_v.clk );
-            while( wr_data_channel.size() > DATA_B_W );
-          if( RND_WAITREQ )
-            begin
-              while( $urandom_range( 1 ) )
-              @( posedge amm_if_v.clk );
-            end
-          amm_if_v.waitrequest <= 1'b0;
-          if( bytes_amount )
-            @( posedge amm_if_v.clk );
-        end
-      else
-        @( posedge amm_if_v.clk );
-    end
-    cur_trans_num++;
-endtask : wr_data_collect
-  
-local task automatic wr_data();
-  int unsigned  wr_addr;
-  int           bytes_amount;
-
-  if( ADDR_TYPE == "BYTE" )
-    begin
-      wr_addr       = amm_if_v.address + start_offset( amm_if_v.byteenable );
-      bytes_amount  = amm_if_v.burstcount;
-    end
-  else
-    begin
-      wr_addr       = amm_if_v.address    * DATA_B_W;
-      bytes_amount  = amm_if_v.burstcount * DATA_B_W;
-    end
-  wr_mem         ( wr_addr, bytes_amount );
-  wr_data_collect( wr_addr, bytes_amount );
-endtask : wr_data
 
 local task automatic rd_data();
   int unsigned  rd_addr;
@@ -219,6 +238,38 @@ local task automatic send_data();
         end
     end
 endtask : send_data
+
+//****************************************************
+// Error insert tasks
+//****************************************************
+
+local task automatic scan_test_mbx();
+  forever
+    begin
+      @( test_started );
+      gen2mem_mbx.get( rnd_scen_obj );
+      insert_error  = rnd_scen_obj.err_enable;
+      err_trans_num = rnd_scen_obj.err_trans_num;
+      err_byte_num  = rnd_scen_obj.err_byte_num;
+      cur_trans_num = 0;
+      @( test_finished );
+      mem2scb_mbx.put( rnd_scen_obj );
+    end
+endtask : scan_test_mbx
+
+local function automatic bit [7 : 0] corrupt_data(
+  int unsigned          wr_addr,        
+  bit           [7 : 0] wr_data
+);
+  corrupt_data = ( ~wr_data );
+  rnd_scen_obj.test_result_registers[CSR_TEST_RESULT] = 32'( 1 );
+  rnd_scen_obj.test_result_registers[CSR_ERR_ADDR   ] = ( wr_addr + err_byte_num );
+  rnd_scen_obj.test_result_registers[CSR_ERR_DATA   ] = { wr_data, corrupt_data };
+endfunction : corrupt_data
+
+//****************************************************
+// Run task
+//****************************************************
 
 task automatic run();
   fork

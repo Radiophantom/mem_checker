@@ -1,3 +1,7 @@
+//***********
+// Environment class instantiates all other classes necessary to build test environment. Allocates classes and launch daemons to run tests.
+//************
+
 `include "bathtube_distribution.sv"
 `include "random_scenario.sv"
 `include "statistics.sv"
@@ -7,26 +11,31 @@
 `include "monitor.sv"
 `include "scoreboard.sv"
 
-import rtl_settings_pkg::*;
-import tb_settings_pkg::*;
+import rtl_settings_pkg::AMM_ADDR_W;
+import rtl_settings_pkg::AMM_DATA_W;
+import rtl_settings_pkg::AMM_BURST_W;
 
 class environment;
 
-generator gen;
-driver driv;
-amm_memory mem;
-monitor mon;
-scoreboard scb;
+//*****************************************
+// Class variables and objects declaration
+//*****************************************
 
-mailbox gen2driv_mbx;
-mailbox gen2mem_mbx;
-mailbox driv2scb_test_mbx;
-mailbox driv2scb_stat_mbx;
-mailbox mem2scb_mbx;
-mailbox mon2scb_mbx;
+generator   gen;
+driver      driv;
+amm_memory  mem;
+monitor     mon;
+scoreboard  scb;
 
-event test_started;
-event test_finished;
+mailbox     gen2driv_mbx;
+mailbox     gen2mem_mbx;
+mailbox     driv2scb_test_mbx;
+mailbox     driv2scb_stat_mbx;
+mailbox     mem2scb_mbx;
+mailbox     mon2scb_mbx;
+
+event       test_started;
+event       test_finished;
 
 function new(
   virtual amm_if #(
