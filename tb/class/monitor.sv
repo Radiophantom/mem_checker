@@ -45,7 +45,7 @@ function new(
   this.mon2scb_mbx    = mon2scb_mbx;
   this.test_finished  = test_finished;
   init_interface();
-endfunction
+endfunction : new
 
 local function automatic void init_interface();
   amm_if_v.read           = 1'b0;
@@ -60,7 +60,7 @@ local function automatic void init_interface();
 endfunction : init_interface
 
 //******************************
-// Write transaction statistics
+// Write transaction monitor
 //******************************
 
 local task automatic wr_stat_gather();
@@ -82,7 +82,7 @@ local task automatic wr_stat_gather();
 endtask : wr_stat_gather
 
 //******************************
-// Read transaction statistics
+// Read transaction monitor
 //******************************
 
 local task automatic rd_stat_gather();
@@ -102,7 +102,7 @@ local task automatic rd_delay_stat_gather();
       @( posedge amm_if_v.clk );
       if( amm_if_v.read )
         begin
-          // delay counter launch
+          // launch delay counter
           fork
             delay_count( next_trans_id );
           join_none
@@ -115,19 +115,20 @@ local task automatic rd_delay_stat_gather();
 endtask : rd_delay_stat_gather
 
 //******************************
-// Delay statistics
+// Delay count task
 //******************************
 
 local task automatic delay_count( int trans_id );
   int words_amount  = amm_if_v.burstcount;
   int delay_cnt     = 0;
 
-  // increment after all tasks done
+  // must be incremented only after all tasks done,
+  // because read ticks statistics is based on next
+  // and current transaction id variable values
   #0;
   next_trans_id++;
-
   fork
-    while( 1 )
+    forever
       begin
         @( posedge amm_if_v.clk );
         delay_cnt++;
@@ -142,11 +143,10 @@ local task automatic delay_count( int trans_id );
       if( amm_if_v.readdatavalid && ( trans_id == cur_trans_id ) )
         words_amount--;
     end
-
-  // increment after all tasks done
+  // prevents triggering of more than one
+  // delay_count() task in the same time slot
   #0;
   cur_trans_id++;
-
   stat_obj.rd_delay_count( delay_cnt );
 endtask : delay_count
 
@@ -155,12 +155,12 @@ endtask : delay_count
 //******************************
 
 task automatic run();
+  // launch statistic gathering daemons
   fork
     wr_stat_gather();
     rd_stat_gather();
     rd_delay_stat_gather();
   join_none
-
   fork
     forever
       begin

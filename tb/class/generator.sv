@@ -49,7 +49,7 @@ function new(
 	CovMode = new();
   this.gen2driv_mbx = gen2driv_mbx;
   this.gen2mem_mbx  = gen2mem_mbx;
-endfunction
+endfunction : new
 
 //*****************************************
 // Tasks

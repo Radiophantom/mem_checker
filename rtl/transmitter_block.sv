@@ -277,7 +277,7 @@ assign burstcount           = test_param_i[CSR_TEST_PARAM][AMM_BURST_W - 2 : 0];
 assign data_mode            = data_mode_t'( test_param_i[CSR_TEST_PARAM][12]      );
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
-assign data_gen_bit         = ( rnd_data[7] ^ rnd_data[1] ^ 1'b1 );
+assign data_gen_bit         = ( rnd_data[7] ^ rnd_data[5] ^ rnd_data[4] ^ rnd_data[3] );
 
 assign trans_busy_o         = ( in_process || storage_valid );
 

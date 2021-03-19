@@ -1,7 +1,8 @@
 import rtl_settings_pkg::*;
 
 module mem_checker(
-  input                               rst_i,
+  input                               rst_sys_i,
+  input                               rst_mem_i,
   input                               clk_sys_i,
   input                               clk_mem_i,
 
@@ -51,7 +52,8 @@ cmp_struct_t            cmp_struct;
 logic                   trans_ready;
 
 csr_block csr_block_inst( 
-  .rst_i            ( rst_i                                         ),
+  .rst_sys_i        ( rst_sys_i                                     ),
+  .rst_mem_i        ( rst_mem_i                                     ),
   .clk_sys_i        ( clk_sys_i                                     ),
   .clk_mem_i        ( clk_mem_i                                     ),
 
@@ -70,7 +72,7 @@ csr_block csr_block_inst(
 );
 
 control_block control_block_inst(
-  .rst_i            ( rst_i                                         ),
+  .rst_i            ( rst_mem_i                                     ),
   .clk_i            ( clk_mem_i                                     ),
                                               
   .test_start_i     ( test_start                                    ),
@@ -93,7 +95,7 @@ control_block control_block_inst(
 );
 
 transmitter_block transmitter_block_inst( 
-  .rst_i              ( rst_i                                         ),
+  .rst_i              ( rst_mem_i                                     ),
   .clk_i              ( clk_mem_i                                     ),
                                                  
   .test_param_i       ( csr_registers[CSR_SET_DATA : CSR_TEST_PARAM]  ),
@@ -121,7 +123,7 @@ transmitter_block transmitter_block_inst(
 );
 
 compare_block compare_block_inst(
-  .rst_i            ( rst_i                                       ),
+  .rst_i            ( rst_mem_i                                   ),
   .clk_i            ( clk_mem_i                                   ),
 
   .test_start_i     ( test_start                                  ),
@@ -139,7 +141,7 @@ compare_block compare_block_inst(
 );
 
 measure_block measure_block_inst( 
-  .rst_i            ( rst_i                                     ),
+  .rst_i            ( rst_mem_i                                 ),
   .clk_i            ( clk_mem_i                                 ),
 
   .readdatavalid_i  ( mem_readdatavalid_i                       ),

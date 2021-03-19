@@ -298,7 +298,7 @@ assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
 assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
 
 assign err_byte         = check_readdata[1][err_byte_num];
-assign data_gen_bit     = ( data_ptrn[6] ^ data_ptrn[1] ^ data_ptrn[0] );
+assign data_gen_bit     = ( data_ptrn[7] ^ data_ptrn[5] ^ data_ptrn[4] ^ data_ptrn[3] );
 
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
 

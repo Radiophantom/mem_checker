@@ -1,7 +1,7 @@
 package rtl_settings_pkg;
 
-parameter int     MEM_ADDR_W    = 29; // must be fit to address space not greater than 4Gb (consider MEM_DATA_W parameter)
-parameter int     MEM_DATA_W    = 64;
+parameter int     MEM_ADDR_W    = 26; // must be fit to address space not greater than 4Gb (consider MEM_DATA_W parameter)
+parameter int     MEM_DATA_W    = 512;
 parameter int     MEM_DATA_B_W  = ( MEM_DATA_W / 8 );
 
 parameter int     AMM_ADDR_W    = 32;
@@ -65,12 +65,6 @@ typedef struct packed{
   data_mode_t                           data_mode;
   logic         [7 : 0]                 data_ptrn;
 } cmp_struct_t;
-
-// typedef struct packed{
-//   logic   [DATA_B_W - 1 : 0]  start;
-//   logic   [DATA_B_W - 1 : 0]  merged;
-//   logic   [DATA_B_W - 1 : 0]  finish;
-// } mask_t;
 
 function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
   logic                     start_enable,

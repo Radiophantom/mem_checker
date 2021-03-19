@@ -55,7 +55,7 @@ function new(
   this.test_started       = test_started;
   this.test_finished      = test_finished;
   init_interface();
-endfunction
+endfunction : new
 
 local function automatic void init_interface();
   amm_if_v.read           = 1'b0;
@@ -120,6 +120,10 @@ local task automatic save_test_result();
   for( int i = CSR_WR_TICKS; i <= CSR_RD_REQ; i++ )
     rd_word( i, stat_obj.stat_registers[i] );
 endtask : save_test_result
+
+//****************************************************
+// Run task
+//****************************************************
 
 task automatic run();
   fork

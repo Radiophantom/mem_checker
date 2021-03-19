@@ -4,7 +4,9 @@
 // behavior observed, then displays error CSR's contents and stops simulation.        //
 //************************************************************************************//
 
-import tb_settings_pkg::*;
+import rtl_settings_pkg::CSR_TEST_RESULT;
+import rtl_settings_pkg::CSR_ERR_ADDR;
+import rtl_settings_pkg::CSR_ERR_DATA;
 
 class scoreboard;
 
@@ -41,7 +43,7 @@ function new(
   this.driv2scb_stat_mbx  = driv2scb_stat_mbx;
   this.mem2scb_mbx        = mem2scb_mbx;
   this.mon2scb_mbx        = mon2scb_mbx;
-endfunction
+endfunction : new
 
 //*****************************
 // Tasks
@@ -56,7 +58,6 @@ task automatic run();
           driv2scb_stat_mbx.get( rcv_stat  );
           mem2scb_mbx.get      ( ref_scen );
           mon2scb_mbx.get      ( ref_stat );
-
           // check error detection behavior
           if( ref_scen.test_result_registers[CSR_TEST_RESULT] == rcv_scen.test_result_registers[CSR_TEST_RESULT] )
             begin
@@ -93,7 +94,6 @@ task automatic run();
                 end
               $stop();
             end
-
           // check statistics registers content
           foreach( ref_stat.stat_registers[i] )
             if( ref_stat.stat_registers[i] != rcv_stat.stat_registers[i] )
@@ -103,7 +103,6 @@ task automatic run();
                 $stop();
               end
         end
-
         $display( "Test successfully passed, congratulations ladies and gentlements" );
         $stop();
     end

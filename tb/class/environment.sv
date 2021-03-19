@@ -1,6 +1,7 @@
-//***********
-// Environment class instantiates all other classes necessary to build test environment. Allocates classes and launch daemons to run tests.
-//************
+//*******************************************************************//
+// This class builds TB environment : allocates and connnects        //
+// together all TB component, then starts test, running all daemons. //
+//*******************************************************************//
 
 `include "bathtube_distribution.sv"
 `include "random_scenario.sv"
@@ -54,12 +55,11 @@ function new(
   driv2scb_stat_mbx = new();
   mem2scb_mbx       = new();
   mon2scb_mbx       = new();
-
-  gen   = new( gen2driv_mbx, gen2mem_mbx );
-  driv  = new( amm_if_csr, gen2driv_mbx, driv2scb_test_mbx, driv2scb_stat_mbx, test_started, test_finished );
-  mem   = new( amm_if_mem, gen2mem_mbx, mem2scb_mbx, test_started, test_finished );
-  mon   = new( amm_if_mem, mon2scb_mbx, test_finished );
-  scb   = new( driv2scb_test_mbx, driv2scb_stat_mbx, mem2scb_mbx, mon2scb_mbx );
+  gen   = new( gen2driv_mbx,      gen2mem_mbx                                                                             );
+  mon   = new( amm_if_mem,        mon2scb_mbx,        test_finished                                                       );
+  scb   = new( driv2scb_test_mbx, driv2scb_stat_mbx,  mem2scb_mbx,        mon2scb_mbx                                     );
+  mem   = new( amm_if_mem,        gen2mem_mbx,        mem2scb_mbx,        test_started,       test_finished               );
+  driv  = new( amm_if_csr,        gen2driv_mbx,       driv2scb_test_mbx,  driv2scb_stat_mbx,  test_started, test_finished );
 endfunction
 
 task automatic run();

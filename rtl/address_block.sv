@@ -44,17 +44,17 @@ logic                             rnd_gen_bit;
 generate
   if( RND_ADDR_W == 8 )
     begin
-      assign rnd_gen_bit = ( rnd_addr[7] ^ rnd_addr[1] ^ 1'b1 );
+      assign rnd_gen_bit = ( rnd_addr[7] ^ rnd_addr[5] ^ rnd_addr[4] ^ rnd_addr[3] );
     end
   else
     if( RND_ADDR_W == 16 )
       begin
-        assign rnd_gen_bit = ( rnd_addr[15] ^ rnd_addr[1] ^ 1'b1 );
+        assign rnd_gen_bit = ( rnd_addr[15] ^ rnd_addr[14] ^ rnd_addr[12] ^ rnd_addr[3] );
       end
     else
       if( RND_ADDR_W == 32 )
         begin
-          assign rnd_gen_bit = ( rnd_addr[31] ^ rnd_addr[3] ^ 1'b1 );
+          assign rnd_gen_bit = ( rnd_addr[31] ^ rnd_addr[21] ^ rnd_addr[1] ^ rnd_addr[0] );
         end
 endgenerate
 
