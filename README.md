@@ -16,4 +16,4 @@
 # **Measure block**.  
 Осуществляет измерение метрик : пропускной способности, минимальной, максимальной и средней задержек. Результат записывает в CSR по окончании каждого теста.  
   
-![block_scheme](https://github.com/Radiophantom/Memory_Checker/blob/master/block_scheme.png)
+![block_scheme](https://https://github.com/Radiophantom/mem_checker/blob/enhanced_transmitter/block_scheme.png)
