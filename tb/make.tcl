@@ -8,4 +8,4 @@ vsim -voptargs="+acc" mem_checker_tb
 
 do wave.do
 
-# run -all
+run -all
