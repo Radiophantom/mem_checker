@@ -21,9 +21,15 @@ module measure_block(
   output logic  [CSR_RD_REQ : CSR_WR_TICKS][31 : 0]   meas_result_o
 );
 
-localparam int PIPE_W   = 16; // must be power of 2
-localparam int CNT_NUM  = 4; // amount of cnt for concurrent read delay count
+// pipeline width must be power of 2
+localparam int PIPE_W   = 16;
+// amount of cnt for concurrent read delay counting
+localparam int CNT_NUM  = 4;
 localparam int CNT_W    = $clog2( CNT_NUM );
+
+//********
+// Variables declaration
+//********
 
 logic                 rd_req_flag;
 logic                 rd_req_stb;
@@ -57,6 +63,11 @@ logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
 logic [CNT_NUM - 1 : 0]                       delay_cnt_reg;
 logic [CNT_NUM - 1 : 0][15 : 0]               delay_cnt_array;
 
+//*******
+// Read transactions tick count
+//*******
+
+// read signal state save for first strobe detect
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rd_req_flag <= 1'b0;
@@ -66,20 +77,6 @@ always_ff @( posedge clk_i, posedge rst_i )
         rd_req_flag <= 1'b1;
       else
         rd_req_flag <= 1'b0;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    load_cnt_num <= CNT_W'( 0 );
-  else
-    if( rd_req_stb )
-      load_cnt_num <= load_cnt_num + 1'b1;
-
-always_ff @( posedge clk_i, posedge rst_i )
-  if( rst_i )
-    active_cnt_num <= CNT_W'( 0 );
-  else
-    if( last_word_stb )
-      active_cnt_num <= active_cnt_num + 1'b1;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -96,6 +93,32 @@ always_ff @( posedge clk_i, posedge rst_i )
   else
     rd_ticks_count_en <= ( active_cnt_num != load_cnt_num );
 
+  always_ff @( posedge clk_i )
+  if( test_start_i )
+    rd_ticks <= 32'( 0 );
+  else
+    if( rd_ticks_count_en )
+      rd_ticks <= rd_ticks + 1'b1;
+
+//********
+// Read delay count logic
+//*******
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    load_cnt_num <= CNT_W'( 0 );
+  else
+    if( rd_req_stb )
+      load_cnt_num <= load_cnt_num + 1'b1;
+
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    active_cnt_num <= CNT_W'( 0 );
+  else
+    if( last_word_stb )
+      active_cnt_num <= active_cnt_num + 1'b1;
+
+// latch read request burstcount and count to 0 and stop
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
@@ -104,6 +127,7 @@ always_ff @( posedge clk_i )
       if( readdatavalid_i && ( active_cnt_num == i ) )
         word_cnt_array[i] <= word_cnt_array[i] - 1'b1;
 
+// delay count enable flags
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
@@ -112,6 +136,7 @@ always_ff @( posedge clk_i )
       if( readdatavalid_i && ( active_cnt_num == i ) )
         delay_cnt_reg[i] <= 1'b0;
 
+// delay counters
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
@@ -134,20 +159,16 @@ always_ff @( posedge clk_i )
     if( readdatavalid_i )
       rd_words <= rd_words + 1'b1;
 
-always_ff @( posedge clk_i )
-  if( test_start_i )
-    rd_ticks <= 32'( 0 );
-  else
-    if( rd_ticks_count_en )
-      rd_ticks <= rd_ticks + 1'b1;
-
+// save current cnt number to save delay
 always_ff @( posedge clk_i )
   if( last_word_stb )
     save_cnt_num <= active_cnt_num;
 
+// save strobe pipe
 always_ff @( posedge clk_i )
   save_stb_delayed <= { save_stb_delayed[0], last_word_stb };
 
+// save current counter value
 always_ff @( posedge clk_i )
   cmp_delay <= delay_cnt_array[save_cnt_num];
 
@@ -174,6 +195,10 @@ always_ff @( posedge clk_i )
     if( save_stb_delayed[1] )
       sum_delay <= sum_delay + cmp_delay;
 
+//******************
+// Write units statistics
+//***********
+
 generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
@@ -192,11 +217,13 @@ generate
 
           logic [STAGES_AMOUNT : 0] wr_stb_delayed;
 
+          // split byteenable and count bytes in each nibble
           always_ff @( posedge clk_i )
             if( wr_unit_stb )
               for( int i = 0; i < INPUTS_AMOUNT; i++ ) 
                 bytes_amount[i] <= STAGE_W'( bytes_count( byteenable_i[( PIPE_W - 1 ) + i * PIPE_W -: PIPE_W] ) );
 
+          // pipeline adder
           always_ff @( posedge clk_i )
             begin
               for( int j = 0; j < INPUTS_AMOUNT / 2; j++ )
@@ -219,6 +246,7 @@ generate
               if( wr_stb_delayed[STAGES_AMOUNT] )
                 wr_units <= wr_units + bytes_amount_sum[STAGES_AMOUNT - 1][0];
 
+          // if any of pipe stages is active - block is busy
           assign write_busy = ( |wr_stb_delayed );
           //----------------------------------------------------------------------------------
         end

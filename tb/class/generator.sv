@@ -39,7 +39,7 @@ covergroup CovMode;
 endgroup : CovMode
 
 //*****************************************
-// Functions
+// Class allocating
 //*****************************************
 
 function new(

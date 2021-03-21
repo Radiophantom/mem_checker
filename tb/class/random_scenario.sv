@@ -2,8 +2,8 @@
 // Class allows to generate random scenario for test with user preset //
 // test, address and data modes distribution. Set the probability of  //
 // error inserting and select random transaction number to corrupt.   //
-// Error byte number within the transaction generates with bathtube   //
-// distribution to cover more bound cases.                            //
+// Error byte number within the transaction is generated with         // 
+// bathtube distribution to cover more bound cases.                   //
 // Class also contains copy of some memory checker's CSRs to simplify //
 // TB flow control.                                                   //
 //********************************************************************//

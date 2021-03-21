@@ -32,6 +32,10 @@ module transmitter_block(
   output logic  [DATA_B_W - 1     : 0]                    byteenable_o
 );
 
+//**********
+// Variables declaration
+//********
+
 data_mode_t                           data_mode;
 test_mode_t                           test_mode;
 
@@ -59,6 +63,7 @@ logic                                 storage_valid;
 cmp_struct_t                          storage_struct;
 cmp_struct_t                          cur_struct;
 
+// if pre-calculated storage is valid
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     storage_valid <= 1'b0;
@@ -79,6 +84,7 @@ always_ff @( posedge clk_i )
     if( wr_unit_stb )
       last_transaction <= ( burst_cnt == 1 );
 
+// block is busy
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     in_process <= 1'b0;
@@ -99,10 +105,13 @@ generate
       logic                           low_bits_burst_en;
       logic   [BURST_SUM_W - 1 : 0]   burst_units_sum;
 
+      // if burstcount width greater than byte address width within word
       if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
         begin
+          // last byte address in transaction calculate
           assign burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] );
 
+          // burstcount value calculate, remember if low burst enable
           always_comb
             if( storage_burst_en && low_bits_burst_en )
               burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
@@ -123,14 +132,19 @@ generate
       always_ff @( posedge clk_i )
         if( trans_valid_i && trans_ready_o )
           begin
+            // define if all bytes can be transmitted in one word or not
             storage_burst_en  <= ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount  >= DATA_B_W );
+            // define if low address bits are out of word bound
+            // this case you need 2 transactin at least
             low_bits_burst_en <= burst_units_sum[ADDR_B_W];
           end
 
-     always_ff @( posedge clk_i )
+      // pre-calculate transaction parameters
+      always_ff @( posedge clk_i )
         if( trans_valid_i && trans_ready_o )
           begin
             storage_struct.trans_type <= trans_type_i;
+            // latch only word address
             storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
             storage_struct.end_off    <= ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount );
@@ -143,10 +157,12 @@ generate
           if( wr_unit_stb )
             burst_cnt <= burst_cnt - 1'b1;
 
+      // save current transaction last byte address
       always_ff @( posedge clk_i )
         if( start_stb )
           cur_struct.end_off  <= storage_struct.end_off;
 
+      // create structure to compare module with necessary fields
       always_comb
         begin
           cmp_struct_o.start_addr   = storage_struct.start_addr;
@@ -164,13 +180,16 @@ generate
         if( start_stb )
           burstcount_o <= burstcount_exp + 1'b1;
 
+      // word aligne byte address
       always_ff @( posedge clk_i )
         if( start_stb )
           address_o <= ( storage_struct.start_addr << ADDR_B_W );
 
+      // calculate byteenable pattern
       always_ff @( posedge clk_i )
         if( start_stb || wr_unit_stb )
           if( start_stb )
+            // always all bits '1' for read transaction
             if( storage_struct.trans_type )
               byteenable_o <= '1;
             else
@@ -251,6 +270,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( !waitrequest_i )
         read_o <= 1'b0;
 
+// select data pattern source
 always_ff @( posedge clk_i )
   if( writedata_en ) 
     if( data_mode == RND_DATA )
@@ -258,6 +278,7 @@ always_ff @( posedge clk_i )
     else
       writedata_o <= { DATA_B_W{ data_ptrn } };
     
+// random data byte pattern generator
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rnd_data <= '1;
@@ -271,18 +292,22 @@ always_comb
   else
     cmp_en_o = 1'b0;
 
+// define test parameters
 assign data_ptrn            = test_param_i[CSR_SET_DATA  ][7 : 0              ];
 assign burstcount           = test_param_i[CSR_TEST_PARAM][AMM_BURST_W - 2 : 0];
-
 assign data_mode            = data_mode_t'( test_param_i[CSR_TEST_PARAM][12]      );
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
+// random value generation polynom 
 assign data_gen_bit         = ( rnd_data[7] ^ rnd_data[5] ^ rnd_data[4] ^ rnd_data[3] );
 
+// if block is in process or valid storage present then block is busy yet
 assign trans_busy_o         = ( in_process || storage_valid );
 
+// if last transaction accepted or block is not busy then it is ready for transmition
 assign trans_ready_o        = ( start_stb || !in_process );
 
+// amm-writedata latch enable
 assign writedata_en         = ( start_stb     && ( !storage_struct.trans_type ) ) ||
                               ( wr_unit_stb   && ( !last_transaction          ) );
 

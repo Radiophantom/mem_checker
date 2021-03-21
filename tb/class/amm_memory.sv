@@ -30,7 +30,7 @@ typedef struct{
   bit [AMM_DATA_W - 1 : 0]  writedata;
 } amm_data_t;
 
-amm_data_t amm_data_channel [$];
+amm_data_t  amm_data_channel [$];
 
 bit [7 : 0] memory_array    [*];
 bit [7 : 0] rd_data_channel [$];
@@ -89,7 +89,7 @@ endfunction : init_interface
 // Write transaction tasks
 //****************************************************
 
-// latch and send write transaction signals into avalon-mm channel
+// save write transactions into amm_data_channel[$]
 local task automatic write_data();
   int unsigned  wr_addr;
   int           trans_amount;
@@ -100,7 +100,7 @@ local task automatic write_data();
   else
     wr_addr     = amm_if_v.address * DATA_B_W;
   trans_amount  = amm_if_v.burstcount;
-  // launch amm-to-memory data stream bridge daemon
+  // launch amm-to-memory bridge daemon
   fork 
     prep_wr_data( wr_addr, trans_amount );
   join_none
@@ -206,6 +206,7 @@ local task automatic rd_mem(
   int           bytes_amount
 );
   int trans_amount  = ( bytes_amount / MEM_DATA_B_W );
+  // emulating memory delay ( e.g. bank activation or refresh operation for DDR memory ) 
   // "+ MEM_DELAY" because of delay to receive and process read transaction in memory chip
   int delay_ticks   = $dist_poisson( seed, DELAY_MEAN_VAL ) + MEM_DELAY;
  

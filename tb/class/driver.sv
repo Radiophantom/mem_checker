@@ -1,6 +1,6 @@
 //**************************************************************************//
 // Class receives test scenario from 'generator' class and write respective //
-// parameters to memory tester CSR and starts test execution. When test     //
+// parameters to memory tester CSR, then starts test execution. When test   //
 // is finished, saves the results and sends them to 'scoreboard' class.     //
 //**************************************************************************//
 

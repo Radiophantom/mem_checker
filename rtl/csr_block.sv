@@ -24,6 +24,10 @@ module csr_block(
   output logic  [CSR_SET_DATA : CSR_TEST_PARAM][31 : 0]   test_param_o 
 );
 
+//**********************************
+// Variables declaration
+//**********************************
+
 logic                                 [2  : 0]  test_finished_reg;
 logic                                           test_finished_stb;
 
@@ -41,6 +45,11 @@ logic [CSR_SET_DATA : CSR_TEST_PARAM ][31 : 0]  test_param_csr;
 logic [CSR_RD_REQ   : CSR_TEST_FINISH][31 : 0]  result_csr;
 logic [CSR_RD_REQ   : CSR_TEST_START ][31 : 0]  read_csr;
 
+//**********************************
+// Test parameters CSR
+//**********************************
+
+// self-clear test start bit after test already started
 always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   if( rst_sys_i )
     test_start_csr[0] <= 1'b0;
@@ -55,6 +64,11 @@ always_ff @( posedge clk_sys_i )
   if( write_i )
     test_param_csr[address_i] <= writedata_i;
 
+//**********************************
+// Test result CSR
+//**********************************
+
+// self-clear test finish bit after register was read
 always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   if( rst_sys_i )
     result_csr[CSR_TEST_FINISH][0] <= 1'b0;
@@ -68,26 +82,24 @@ always_ff @( posedge clk_sys_i, posedge rst_sys_i )
 always_ff @( posedge clk_sys_i )
   if( test_finished_stb )
     result_csr[CSR_RD_REQ : CSR_TEST_RESULT] <= test_result_i;
+
+//**********************************
+// Avalon-MM read logic
+//**********************************
     
-always_ff @( posedge clk_sys_i, posedge rst_sys_i )
-  if( rst_sys_i )
-    read_req <= 1'b0;
-  else
-    read_req <= read_i;
-
-always_ff @( posedge clk_sys_i )
-  if( read_i )
-    read_addr <= address_i;
-
 always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   if( rst_sys_i )
     readdatavalid_o <= 1'b0;
   else
-    readdatavalid_o <= read_req;
+    readdatavalid_o <= read_i;
 
 always_ff @( posedge clk_sys_i )
-  if( read_req )
+  if( read_i )
     readdata_o <= read_csr[read_addr];
+
+//************************************
+// Cross clock domain synchronization
+//************************************
 
 always_ff @( posedge clk_mem_i, posedge rst_mem_i )
   if( rst_mem_i )
@@ -107,10 +119,12 @@ always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   else
     test_finished_reg <= { test_finished_reg[1 : 0], test_finished_i };
 
+// edge detector strobes
 assign test_start_stb     = ( test_start_reg   [1]  && ( !test_start_reg   [2] ) );
 assign rst_start_bit_stb  = ( rst_start_bit_reg[1]  && ( !rst_start_bit_reg[2] ) );
 assign test_finished_stb  = ( test_finished_reg[1]  && ( !test_finished_reg[2] ) );
 
+// CSR space mapping
 assign read_csr           = { result_csr, test_param_csr, test_start_csr };
 
 assign test_start_o       = test_start_stb;

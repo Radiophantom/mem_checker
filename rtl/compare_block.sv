@@ -23,11 +23,55 @@ module compare_block(
 
 localparam int CMP_W = $bits( cmp_struct_t );
 
-logic   [AMM_DATA_W / 8 - 1 : 0][7 : 0]  data_fifo_q;
-logic   [CMP_W - 1 : 0]                  cmp_fifo_q;
+//********************************************
+// Variables declaration
+//********************************************
 
-logic                                    rd_data_fifo, data_fifo_empty;
-logic                                    rd_cmp_fifo,  cmp_fifo_empty;
+logic   [AMM_DATA_W / 8 - 1 : 0][7 : 0]         data_fifo_q;
+logic   [CMP_W - 1 : 0]                         cmp_fifo_q;
+
+logic                                           rd_data_fifo, data_fifo_empty;
+logic                                           rd_cmp_fifo,  cmp_fifo_empty;
+
+cmp_struct_t                                    storage_struct;
+
+logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0]  check_readdata;
+
+
+logic   [CMP_ADDR_W - 1 : 0]                    check_addr_cnt;
+
+logic   [DATA_B_W - 1 : 0]                      err_byte_flag;
+logic   [DATA_B_W - 1 : 0][3 : 0]               err_byte_num_arr;
+logic   [ADDR_B_W - 1 : 0]                      err_byte_num;
+logic   [7 : 0]                                 err_byte;
+
+logic   [DATA_B_W - 1 : 0]                      check_ptrn;
+logic   [DATA_B_W - 1 : 0]                      check_vector_result;
+logic   [7 : 0]                                 data_ptrn;
+
+logic   [AMM_BURST_W - 2 : 0]                   word_cnt;
+logic                                           last_word;
+
+logic   [1 : 0]                                 pipe_stage_en;
+logic   [1 : 0][7 : 0]                          check_data_ptrn;
+logic   [1 : 0][CMP_ADDR_W - 1 : 0]             check_addr;
+
+logic                                           check_error;
+logic                                           lock_error_stb;
+
+logic                                           data_gen_bit;
+
+enum logic [2 : 0] {
+  IDLE_S,
+  CALC_MASK_S,
+  LOAD_S,
+  CHECK_S,
+  ERROR_S
+} state, next_state;
+
+//********************************************
+// Modules instantiation
+//********************************************
 
 fifo #(
   .AWIDTH   ( 2               ),
@@ -61,43 +105,9 @@ fifo #(
   .empty_o  ( data_fifo_empty )
 );
 
-cmp_struct_t                                    storage_struct;
-
-logic   [1 : 0][AMM_DATA_W / 8 - 1 : 0][7 : 0]  check_readdata;
-
-
-logic   [CMP_ADDR_W - 1 : 0]                    check_addr_cnt;
-
-logic   [DATA_B_W - 1 : 0]                      err_byte_flag;
-logic   [DATA_B_W - 1 : 0][3 : 0]               err_byte_num_arr;
-logic   [ADDR_B_W - 1 : 0]                      err_byte_num;
-logic   [7 : 0]                                 err_byte;
-
-logic   [DATA_B_W - 1 : 0]                      check_ptrn;
-logic   [DATA_B_W - 1 : 0]                      check_vector_result;
-logic   [7 : 0]                                 data_ptrn;
-
-logic   [AMM_BURST_W - 2 : 0]                   word_cnt;
-logic                                           last_word;
-
-logic   [1 : 0]                                 pipe_stage_en;
-logic   [1 : 0][7 : 0]                          check_data_ptrn;
-logic   [1 : 0][CMP_ADDR_W - 1 : 0]             check_addr;
-
-logic                                           check_error;
-logic                                           lock_error_stb;
-
-logic                                           data_gen_bit;
-
-// mask_t                                          mask_struct;
-
-enum logic [2 : 0] {
-  IDLE_S,
-  CALC_MASK_S,
-  LOAD_S,
-  CHECK_S,
-  ERROR_S
-} state, next_state;
+//********************************************
+// State machine
+//********************************************
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -121,29 +131,24 @@ always_comb
               if( ADDR_TYPE == "WORD" )
                 next_state = LOAD_S;
         end
-
       CALC_MASK_S :
         begin
           next_state = LOAD_S;
         end
-
       LOAD_S :
         begin
           next_state = CHECK_S;
         end
-
       CHECK_S :
         begin
           if( last_word && rd_data_fifo )
             next_state = IDLE_S;
         end
-
       ERROR_S :
         begin
           if( test_start_i )
             next_state = IDLE_S;
         end
-
       default :
         begin
           next_state = IDLE_S;
@@ -154,14 +159,6 @@ always_comb
 generate
   if( ADDR_TYPE == "BYTE" )
     begin : byte_address
-
-      // always_ff @( posedge clk_i )
-      //   if( state == CALC_MASK_S )
-      //     begin
-      //       mask_struct.start   <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b0, storage_struct.end_off );
-      //       mask_struct.finish    <= byteenable_ptrn( 1'b0, storage_struct.start_off, 1'b1, storage_struct.end_off );
-      //       mask_struct.merged  <= byteenable_ptrn( 1'b1, storage_struct.start_off, 1'b1, storage_struct.end_off );
-      //     end
 
       always_ff @( posedge clk_i )
         if( state == CALC_MASK_S )
@@ -177,6 +174,7 @@ generate
           if( rd_data_fifo )
             last_word <= ( word_cnt == 1 );
 
+      // calculate bytes position mask for checking
       always_ff @( posedge clk_i )
         if( state == LOAD_S )
           if( last_word )
@@ -190,6 +188,7 @@ generate
             else
               check_ptrn <= '1;
 
+        // get check result mask
         always_ff @( posedge clk_i )
           if( pipe_stage_en[0] )
             check_vector_result <= check_vector( check_ptrn, data_ptrn, data_fifo_q );
@@ -226,6 +225,11 @@ always_ff @( posedge clk_i, posedge rst_i )
   else
     pipe_stage_en <= { pipe_stage_en[0], rd_data_fifo };
 
+//***********
+// 1 pipe stage logic
+//***********
+
+// restore data pattern for current word
 always_ff @( posedge clk_i )
   if( state == LOAD_S )
     data_ptrn <= storage_struct.data_ptrn;
@@ -234,6 +238,7 @@ always_ff @( posedge clk_i )
       if( pipe_stage_en[0] )
         data_ptrn <= { data_ptrn[6:0], data_gen_bit };
 
+// calculate current check word address
 always_ff @( posedge clk_i )
   if( state == LOAD_S )
     check_addr_cnt <= storage_struct.start_addr;
@@ -241,18 +246,30 @@ always_ff @( posedge clk_i )
     if( pipe_stage_en[0] )
       check_addr_cnt <= check_addr_cnt + 1'b1;
 
+//*********
+// All pipe stages logic
+//**********
+
+// save current word address
 always_ff @( posedge clk_i )
   if( |pipe_stage_en )
     check_addr <= { check_addr[0], check_addr_cnt };
 
+// save current data pattern
 always_ff @( posedge clk_i )
   if( |pipe_stage_en )
     check_data_ptrn <= { check_data_ptrn[0], data_ptrn };
 
+// save current word data
 always_ff @( posedge clk_i )
   if( |pipe_stage_en )
     check_readdata <= { check_readdata[0], data_fifo_q };
 
+//*************
+// 2 pipe stage logic 
+//***********
+
+// find first error byte in each nibble ( nibbles amount depends on pipeline width ) and set error flag
 always_ff @( posedge clk_i )
   if( pipe_stage_en[1] )
     for( int i = 0; i < DATA_B_W / 16; i++ )
@@ -261,20 +278,28 @@ always_ff @( posedge clk_i )
         err_byte_num_arr[i] <= 4'( err_byte_find( check_vector_result[15 + i * 16 -: 16] ) );
       end
 
+// check if error occured
 always_ff @( posedge clk_i )
   if( pipe_stage_en[1] )
     check_error <= ( |check_vector_result );
   else
     check_error <= 1'b0;
 
+//*****
+// 3 pipe stage logic ( error find )
+//*******
+
+// latch error byte address
 always_ff @( posedge clk_i )
   if( lock_error_stb )
     err_result_o[CSR_ERR_ADDR] <= { check_addr[1], err_byte_num };
 
+// latch error and original data patterns
 always_ff @( posedge clk_i )
   if( lock_error_stb )
     err_result_o[CSR_ERR_DATA] <= { check_data_ptrn[1], err_byte };
 
+// generate error signal to stop checker activity
 always_ff @( posedge clk_i )
   if( test_start_i )
     cmp_error_o <= 1'b0;
@@ -284,6 +309,7 @@ always_ff @( posedge clk_i )
     else
       cmp_error_o <= 1'b0;
 
+// if block is busy now
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     cmp_busy_o <= 1'b0;
@@ -294,16 +320,22 @@ always_ff @( posedge clk_i, posedge rst_i )
       if( state == IDLE_S )
         cmp_busy_o <= ( !cmp_fifo_empty );
 
+// read compare storage fifo
 assign rd_cmp_fifo      = ( state == IDLE_S   ) && ( !cmp_fifo_empty  );
+// read data storage fifo
 assign rd_data_fifo     = ( state == CHECK_S  ) && ( !data_fifo_empty );
 
+// error byte data pattern
 assign err_byte         = check_readdata[1][err_byte_num];
 assign data_gen_bit     = ( data_ptrn[7] ^ data_ptrn[5] ^ data_ptrn[4] ^ data_ptrn[3] );
 
+// cmp fifo output cast
 assign storage_struct   = cmp_struct_t'( cmp_fifo_q );
 
+// error found strobe
 assign lock_error_stb   = check_error && ( !cmp_error_o );
 
-assign  err_byte_num    = { err_byte_find( err_byte_flag ), err_byte_num_arr[err_byte_find( err_byte_flag )] };
+// error byte number find
+assign err_byte_num     = { err_byte_find( err_byte_flag ), err_byte_num_arr[err_byte_find( err_byte_flag )] };
 
 endmodule : compare_block

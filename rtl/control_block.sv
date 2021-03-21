@@ -27,8 +27,45 @@ module control_block(
   output logic  [ADDR_W - 1 : 0]                          trans_addr_o
 );
 
-logic                       next_addr_stb;
-logic   [ADDR_W - 1 : 0]    next_addr;
+//**********************************
+// Variables declaration
+//**********************************
+
+logic                             next_addr_stb;
+logic         [ADDR_W - 1 : 0]    next_addr;
+
+
+logic         [15 : 0]            test_count;
+logic         [15 : 0]            cmd_cnt;
+
+test_mode_t                       test_mode;
+
+logic                             last_transaction;
+
+logic                             last_transaction_stb;
+logic                             cmd_accepted_stb;
+logic                             addr_preset_stb;
+
+logic                             finish_flag;
+
+logic                             trans_en_state; 
+logic                             cnt_en_state;
+logic                             finish_state;
+
+enum logic [2:0] {
+  IDLE_S,
+  LOAD_S,
+  WRITE_ONLY_S,
+  READ_ONLY_S,
+  WRITE_WORD_S,
+  READ_WORD_S,
+  END_TEST_S,
+  ERROR_CHECK_S
+} state, next_state;
+
+//**********************************
+// Modules instantiation
+//**********************************
 
 address_block address_block_inst(
   .rst_i          ( rst_i         ),
@@ -42,33 +79,9 @@ address_block address_block_inst(
   .next_addr_o    ( next_addr     )
 );
 
-logic         [15 : 0]    test_count;
-logic         [15 : 0]    cmd_cnt;
-
-test_mode_t               test_mode;
-
-logic                     last_transaction;
-
-logic                     last_transaction_stb;
-logic                     cmd_accepted_stb;
-logic                     addr_preset_stb;
-
-logic                     finish_flag;
-
-logic                     trans_en_state; 
-logic                     cnt_en_state;
-logic                     finish_state;
-
-enum logic [2:0] {
-  IDLE_S,
-  LOAD_S,
-  WRITE_ONLY_S,
-  READ_ONLY_S,
-  WRITE_WORD_S,
-  READ_WORD_S,
-  END_TEST_S,
-  ERROR_CHECK_S
-} state, next_state;
+//**********************************
+// State machine
+//**********************************
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -88,7 +101,6 @@ always_comb
           if( test_start_i )
             next_state = LOAD_S;
         end
-
       LOAD_S :
         begin
           case( test_mode )
@@ -98,25 +110,21 @@ always_comb
             default         : next_state = IDLE_S;
           endcase
         end
-
       READ_ONLY_S :
         begin
           if( last_transaction_stb )
             next_state = END_TEST_S;
         end
-
       WRITE_ONLY_S :
         begin
           if( last_transaction_stb )
             next_state = END_TEST_S;
         end
-
       WRITE_WORD_S :
         begin
           if( cmd_accepted_stb )
             next_state = READ_WORD_S;
         end
-
       READ_WORD_S :
         begin
           if( cmd_accepted_stb )
@@ -125,25 +133,26 @@ always_comb
             else
               next_state = WRITE_WORD_S;
         end
-
       END_TEST_S :
         begin
           if( finish_flag )
             next_state = IDLE_S;
         end
-
       ERROR_CHECK_S :
         begin
           if( finish_flag )
             next_state = IDLE_S;
         end
-
       default :
         begin
           next_state = IDLE_S;
         end
     endcase
   end
+
+//**********************************
+// Transactions amount control
+//**********************************
 
 always_ff @( posedge clk_i )
   if( state == LOAD_S )
@@ -159,6 +168,10 @@ always_ff @( posedge clk_i )
     if( cmd_accepted_stb && cnt_en_state )
       last_transaction <= ( cmd_cnt == 1 );
 
+//**********************************
+// Transaction interface
+//**********************************
+
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     trans_valid_o <= 1'b0;
@@ -172,6 +185,7 @@ always_ff @( posedge clk_i, posedge rst_i )
         if( cnt_en_state && last_transaction_stb )
           trans_valid_o <= 1'b0;
 
+// select write or read transaction enable
 always_ff @( posedge clk_i )
   if( state == LOAD_S )
     trans_type_o <= ( test_mode == READ_ONLY );
@@ -182,7 +196,6 @@ always_ff @( posedge clk_i )
           if( cmd_accepted_stb )
             trans_type_o <= 1'b1;
         end
-
       READ_WORD_S :
         begin
           if( cmd_accepted_stb )
@@ -190,9 +203,14 @@ always_ff @( posedge clk_i )
         end
     endcase
 
+// latch transaction address
 always_ff @( posedge clk_i )
   if( next_addr_stb )
     trans_addr_o <= next_addr;
+
+//**********************************
+// Test finish logic
+//**********************************
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -211,18 +229,22 @@ always_ff @( posedge clk_i )
     if( cmp_error_i )
       test_result_o <= 1'b1;
 
+// command counter enable flag
 assign cnt_en_state         = ( state == WRITE_ONLY_S ) || ( state == READ_ONLY_S ) ||
                               ( state == READ_WORD_S  ); 
 
+// all tester blocks' activity is finished
 assign finish_state         = ( state == END_TEST_S   ) || ( state == ERROR_CHECK_S );
-
-assign next_addr_stb        = ( state == LOAD_S       ) || ( cnt_en_state && cmd_accepted_stb );
-
 assign finish_flag          = ( !cmp_busy_i ) && ( !meas_busy_i ) && ( !trans_busy_i );
 
+// next address enable strobe
+assign next_addr_stb        = ( state == LOAD_S       ) || ( cnt_en_state && cmd_accepted_stb );
+
+// define test parameters
 assign test_count           = test_param_i[CSR_TEST_PARAM][31 : 16];
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
+// command accepted strobes
 assign cmd_accepted_stb     = ( trans_valid_o   && trans_ready_i );
 assign last_transaction_stb = ( last_transaction && cmd_accepted_stb );
 

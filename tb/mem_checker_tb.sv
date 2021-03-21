@@ -63,17 +63,20 @@ initial
   begin
     env = new( amm_if_csr, amm_if_mem );
     fork
+      // apply system  reset
       begin
         rst_sys <= 1'b1;
         @( posedge clk_sys );
         rst_sys <= 1'b0;
       end
+      // apply memory reset
       begin
         rst_mem <= 1'b1;
         @( posedge clk_mem );
         rst_mem <= 1'b0;
       end
     join
+    // start test
     env.run();
   end
 

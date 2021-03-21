@@ -12,7 +12,8 @@ module address_block(
   output logic  [ADDR_W - 1 : 0]                          next_addr_o
 );
 
-function automatic int addr_width_calc( int addr_width );
+//calculate width of the LFSR register
+function automatic int rnd_addr_width_calc( int addr_width );
   if( addr_width <= 8 )
     return( 8 );
   else
@@ -21,9 +22,13 @@ function automatic int addr_width_calc( int addr_width );
     else
       if( addr_width <= 32 )
         return( 32 );
-endfunction : addr_width_calc
+endfunction : rnd_addr_width_calc
 
-localparam RND_ADDR_W = addr_width_calc( ADDR_W );
+localparam RND_ADDR_W = rnd_addr_width_calc( ADDR_W );
+
+//***********************************
+// Variables declaration
+//***********************************
 
 addr_mode_t                       addr_mode;
 
@@ -40,6 +45,10 @@ logic                             inc_addr_en;
 
 logic       [RND_ADDR_W - 1 : 0]  rnd_addr = '1;
 logic                             rnd_gen_bit;
+
+//***********************************
+// Random address generation polynom
+//***********************************
 
 generate
   if( RND_ADDR_W == 8 )
@@ -58,6 +67,10 @@ generate
         end
 endgenerate
 
+//***********************************
+// Address generation registers
+//***********************************
+
 always_ff @( posedge clk_i )
   if( fix_addr_en )
     fix_addr <= test_param_i[CSR_SET_ADDR][ADDR_W - 1 : 0];
@@ -69,13 +82,13 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( rnd_addr_en )
       rnd_addr <= { rnd_addr[RND_ADDR_W - 2 : 0], rnd_gen_bit };
 
-
 always_ff @( posedge clk_i )
   if( run_0_en )
     if( next_addr_en_i )
       run_0 <= { run_0[ADDR_W - 2 : 0], run_0[ADDR_W - 1] };
     else
-      run_0 <= '1 - 1'b1; //{ {(ADDR_W - 1){ 1'b1 }}, 1'b0 };
+      // fill all bits with '1' and reset 0 bit
+      run_0 <= '1 - 1'b1;
 
 
 always_ff @( posedge clk_i )
@@ -83,8 +96,8 @@ always_ff @( posedge clk_i )
     if( next_addr_en_i )
       run_1 <= { run_1[ADDR_W - 2 : 0], run_1[ADDR_W - 1] };
     else
-      run_1 <= '0 + 1'b1; //{ {(ADDR_W - 1){ 1'b0 }}, 1'b1 };
-
+      // fill all bits with '0' and set 0 bit
+      run_1 <= '0 + 1'b1;
 
 always_ff @( posedge clk_i )
   if( inc_addr_en )
@@ -92,6 +105,10 @@ always_ff @( posedge clk_i )
       inc_addr <= inc_addr + 1'b1;
     else
       inc_addr <= test_param_i[CSR_SET_ADDR][ADDR_W - 1 : 0];
+
+//***********************************
+// Address registers multiplexing
+//***********************************
 
 always_comb
   case( addr_mode )
@@ -103,8 +120,10 @@ always_comb
     default     : next_addr_o = ADDR_W'( 0 );
   endcase
 
+// current test address mode define
 assign addr_mode    = addr_mode_t'( test_param_i[CSR_TEST_PARAM][13 : 11] );
 
+// address generation enable requests
 assign fix_addr_en  = ( addr_mode == FIX_ADDR   ) && test_start_i;
 assign rnd_addr_en  = ( addr_mode == RND_ADDR   ) && next_addr_en_i;
 assign run_0_en     = ( addr_mode == RUN_0_ADDR ) && ( test_start_i || next_addr_en_i );
