@@ -6,9 +6,10 @@ parameter int CLK_MEM_T 			= 8_000;
 parameter int RND_WAITREQ   	= 0;
 parameter int RND_RVALID    	= 0;
 
-parameter int DELAY_MEAN_VAL  = 10;
+parameter int DELAY_MEAN_VAL	= 10;
 parameter int MEM_DELAY 	  	= 2;
 
+// calculate first byte address in transaction based on byteenable signal
 function automatic int start_offset(
   bit [127 : 0] byteenable
 );

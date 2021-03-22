@@ -120,10 +120,10 @@ always_comb
     default     : next_addr_o = ADDR_W'( 0 );
   endcase
 
-// current test address mode define
+// define current address mode
 assign addr_mode    = addr_mode_t'( test_param_i[CSR_TEST_PARAM][13 : 11] );
 
-// address generation enable requests
+// next address generation enable requests
 assign fix_addr_en  = ( addr_mode == FIX_ADDR   ) && test_start_i;
 assign rnd_addr_en  = ( addr_mode == RND_ADDR   ) && next_addr_en_i;
 assign run_0_en     = ( addr_mode == RUN_0_ADDR ) && ( test_start_i || next_addr_en_i );

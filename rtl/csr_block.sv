@@ -38,7 +38,6 @@ logic                                 [2  : 0]  test_start_reg;
 logic                                           test_start_stb;
 
 logic                                           read_req;
-logic                                 [3  : 0]  read_addr;
 
 logic                                 [31 : 0]  test_start_csr;
 logic [CSR_SET_DATA : CSR_TEST_PARAM ][31 : 0]  test_param_csr;
@@ -49,7 +48,7 @@ logic [CSR_RD_REQ   : CSR_TEST_START ][31 : 0]  read_csr;
 // Test parameters CSR
 //**********************************
 
-// self-clear test start bit after test already started
+// self-clear start bit after test already started
 always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   if( rst_sys_i )
     test_start_csr[0] <= 1'b0;
@@ -68,7 +67,7 @@ always_ff @( posedge clk_sys_i )
 // Test result CSR
 //**********************************
 
-// self-clear test finish bit after register was read
+// self-clear finish bit after register was read
 always_ff @( posedge clk_sys_i, posedge rst_sys_i )
   if( rst_sys_i )
     result_csr[CSR_TEST_FINISH][0] <= 1'b0;
@@ -76,7 +75,7 @@ always_ff @( posedge clk_sys_i, posedge rst_sys_i )
     if( test_finished_stb )
       result_csr[CSR_TEST_FINISH][0] <= 1'b1;
     else
-      if( read_req && ( read_addr == CSR_TEST_FINISH ) )
+      if( read_i && ( address_i == CSR_TEST_FINISH ) )
         result_csr[CSR_TEST_FINISH][0] <= 1'b0;
 
 always_ff @( posedge clk_sys_i )
@@ -95,7 +94,7 @@ always_ff @( posedge clk_sys_i, posedge rst_sys_i )
 
 always_ff @( posedge clk_sys_i )
   if( read_i )
-    readdata_o <= read_csr[read_addr];
+    readdata_o <= read_csr[address_i];
 
 //************************************
 // Cross clock domain synchronization

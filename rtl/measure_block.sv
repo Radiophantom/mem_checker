@@ -21,60 +21,62 @@ module measure_block(
   output logic  [CSR_RD_REQ : CSR_WR_TICKS][31 : 0]   meas_result_o
 );
 
-// pipeline width must be power of 2
+// pipeline byteenable nibble width must be power of 2
 localparam int PIPE_W   = 16;
-// amount of cnt for concurrent read delay counting
+// amount of cnt for concurrent read delay count
 localparam int CNT_NUM  = 4;
 localparam int CNT_W    = $clog2( CNT_NUM );
 
-//********
+//*******************************
 // Variables declaration
-//********
+//*******************************
 
-logic                 rd_req_flag;
-logic                 rd_req_stb;
-logic                 wr_unit_stb;
-logic                 rd_ticks_count_en;
+logic                                           rd_req_flag;
+logic                                           rd_req_stb;
+logic                                           wr_unit_stb;
+logic                                           rd_ticks_count_en;
 
-logic [1 : 0]         save_stb_delayed;
+logic   [1 : 0]                                 save_stb_delayed;
 
-logic [CNT_W - 1 : 0] load_cnt_num;
-logic [CNT_W - 1 : 0] active_cnt_num;
-logic [CNT_W - 1 : 0] save_cnt_num;
+logic   [CNT_W - 1 : 0]                         load_cnt_num;
+logic   [CNT_W - 1 : 0]                         active_cnt_num;
+logic   [CNT_W - 1 : 0]                         save_cnt_num;
 
-logic [31 : 0]        wr_ticks;
-logic [31 : 0]        wr_units;
-logic [31 : 0]        rd_ticks;
-logic [31 : 0]        rd_words;
-logic [31 : 0]        sum_delay;
-logic [31 : 0]        rd_req_amount;
+logic   [31 : 0]                                wr_ticks;
+logic   [31 : 0]                                wr_units;
+logic   [31 : 0]                                rd_ticks;
+logic   [31 : 0]                                rd_words;
+logic   [31 : 0]                                sum_delay;
+logic   [31 : 0]                                rd_req_amount;
 
-logic [15 : 0]        cmp_delay;
-logic [15 : 0]        min_delay;
-logic [15 : 0]        max_delay;
+logic   [15 : 0]                                cmp_delay;
+logic   [15 : 0]                                min_delay;
+logic   [15 : 0]                                max_delay;
 
-logic                 write_busy;
-logic                 read_busy;
+logic                                           write_busy;
+logic                                           read_busy;
 
-logic                 last_word;
-logic                 last_word_stb;
+logic                                           last_word;
+logic                                           last_word_stb;
 
-logic [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
-logic [CNT_NUM - 1 : 0]                       delay_cnt_reg;
-logic [CNT_NUM - 1 : 0][15 : 0]               delay_cnt_array;
+logic   [CNT_NUM - 1 : 0][AMM_BURST_W - 1 : 0]  word_cnt_array;
+logic   [CNT_NUM - 1 : 0]                       delay_cnt_reg;
+logic   [CNT_NUM - 1 : 0][15 : 0]               delay_cnt_array;
 
-//*******
+//*******************************
 // Read transactions tick count
-//*******
+//*******************************
 
-// read signal state save for first strobe detect
+// read request accept flag
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     rd_req_flag <= 1'b0;
   else
     if( read_i )
+      // if transaction not accepted, remains '1'
       if( waitrequest_i )
         rd_req_flag <= 1'b1;
+      // if yes, reset request flag
       else
         rd_req_flag <= 1'b0;
 
@@ -100,9 +102,9 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( rd_ticks_count_en )
       rd_ticks <= rd_ticks + 1'b1;
 
-//********
+//*******************************
 // Read delay count logic
-//*******
+//*******************************
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -118,7 +120,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( last_word_stb )
       active_cnt_num <= active_cnt_num + 1'b1;
 
-// latch read request burstcount and count to 0 and stop
+// read requests word counters array
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
@@ -136,7 +138,7 @@ always_ff @( posedge clk_i )
       if( readdatavalid_i && ( active_cnt_num == i ) )
         delay_cnt_reg[i] <= 1'b0;
 
-// delay counters
+// delay counters array
 always_ff @( posedge clk_i )
   for( int i = 0; i < CNT_NUM; i++ )
     if( rd_req_stb && ( load_cnt_num == i ) )
@@ -164,11 +166,11 @@ always_ff @( posedge clk_i )
   if( last_word_stb )
     save_cnt_num <= active_cnt_num;
 
-// save strobe pipe
+// compare and save delay in few stages
 always_ff @( posedge clk_i )
   save_stb_delayed <= { save_stb_delayed[0], last_word_stb };
 
-// save current counter value
+// save current delay counter value
 always_ff @( posedge clk_i )
   cmp_delay <= delay_cnt_array[save_cnt_num];
 
@@ -195,9 +197,9 @@ always_ff @( posedge clk_i )
     if( save_stb_delayed[1] )
       sum_delay <= sum_delay + cmp_delay;
 
-//******************
+//*******************************
 // Write units statistics
-//***********
+//*******************************
 
 generate
   if( ADDR_TYPE == "BYTE" )
@@ -233,6 +235,7 @@ generate
                   bytes_amount_sum[i][j] <= bytes_amount_sum[i - 1][j * 2] + bytes_amount_sum[i - 1][j * 2 + 1];
             end
 
+          // define when to get result from adder
           always_ff @( posedge clk_i, posedge rst_i )
             if( rst_i )
               wr_stb_delayed <= STAGES_AMOUNT'( 0 );

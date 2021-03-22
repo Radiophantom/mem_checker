@@ -1,24 +1,26 @@
 package rtl_settings_pkg;
 
-parameter int     MEM_ADDR_W    = 26; // must be fit to address space not greater than 4Gb (consider MEM_DATA_W parameter)
-parameter int     MEM_DATA_W    = 512;
+// MEM_ADDR_W must be fit to address space not greater than 4Gb (consider MEM_DATA_W parameter)
+parameter int     MEM_ADDR_W    = 29;
+parameter int     MEM_DATA_W    = 64;
 parameter int     MEM_DATA_B_W  = ( MEM_DATA_W / 8 );
 
 parameter int     AMM_ADDR_W    = 32;
-parameter int     AMM_DATA_W    = 512; // max value 512 - 200 MHz; max value 1024 - 170 MHz;
-parameter int     AMM_BURST_W   = 6;  // max value 11
+parameter int     AMM_DATA_W    = 512;
+// max value for AMM_BURST_W is 11
+parameter int     AMM_BURST_W   = 6;
 
 parameter int     DATA_B_W      = ( AMM_DATA_W / 8 );
 parameter int     ADDR_B_W      = $clog2( DATA_B_W );
 
-parameter string  ADDR_TYPE     = "BYTE"; // "BYTE" or "WORD"
+// "BYTE" or "WORD" allowed only
+parameter string  ADDR_TYPE     = "BYTE";
 
 parameter int     ADDR_W        = ( ADDR_TYPE == "BYTE" ) ? ( MEM_ADDR_W + $clog2( MEM_DATA_W / 8 )          ):
                                                             ( MEM_ADDR_W - $clog2( AMM_DATA_W / MEM_DATA_W ) );
 
 parameter int     CMP_ADDR_W    = ( ADDR_TYPE == "BYTE" ) ? ( ADDR_W - ADDR_B_W ):
                                                             ( ADDR_W            );
-
 
 parameter int CSR_TEST_START  = 0;
 parameter int CSR_TEST_PARAM  = 1;
@@ -66,6 +68,7 @@ typedef struct packed{
   logic         [7 : 0]                 data_ptrn;
 } cmp_struct_t;
 
+// calculate byteenable pattern for transactions
 function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
   logic                     start_enable,
   logic [ADDR_B_W - 1 : 0]  start_offset,
@@ -82,6 +85,8 @@ function automatic logic [DATA_B_W - 1 : 0] byteenable_ptrn(
     endcase
 endfunction : byteenable_ptrn
 
+// check all bytes according to set mask and generate result vector -
+// '1' if error found, '0' if no error or empty byte
 function automatic logic [DATA_B_W - 1 : 0] check_vector(
   logic [DATA_B_W - 1       : 0]          check_ptrn,
   logic [7                  : 0]          data_ptrn,
@@ -94,6 +99,7 @@ function automatic logic [DATA_B_W - 1 : 0] check_vector(
       check_vector[i] = 1'b0;
 endfunction : check_vector
 
+// find first '1' bit in vector and return it's number
 function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
   logic [DATA_B_W - 1 : 0] check_vector
 );
@@ -103,15 +109,7 @@ function automatic logic [ADDR_B_W - 1 : 0] err_byte_find(
   return( 0 );
 endfunction : err_byte_find
 
-// function automatic logic [ADDR_B_W : 0] bytes_count(
-//   logic [DATA_B_W - 1 : 0] byteenable
-// );
-//   bytes_count = 0;
-//   for( int i = 0; i < DATA_B_W; i++ )
-//     if( byteenable[i] )
-//       bytes_count++;
-// endfunction : bytes_count
-
+// count '1' bits in vector
 function automatic int bytes_count(
   logic [127 : 0] byteenable
 );

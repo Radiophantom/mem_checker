@@ -1,0 +1,16 @@
+# packages
+../packages/rtl_settings_pkg.sv
+../packages/tb_settings_pkg.sv
+
+# rtl
+../rtl/address_block.sv
+../rtl/compare_block.sv
+../rtl/control_block.sv
+../rtl/csr_block.sv
+../rtl/fifo.sv
+../rtl/measure_block.sv
+../rtl/mem_checker.sv
+../rtl/transmitter_block.sv
+
+# tb
+./mem_checker_tb.sv

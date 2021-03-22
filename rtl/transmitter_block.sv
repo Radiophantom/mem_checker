@@ -84,7 +84,7 @@ always_ff @( posedge clk_i )
     if( wr_unit_stb )
       last_transaction <= ( burst_cnt == 1 );
 
-// block is busy
+// if transaction is in process
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     in_process <= 1'b0;
@@ -105,13 +105,13 @@ generate
       logic                           low_bits_burst_en;
       logic   [BURST_SUM_W - 1 : 0]   burst_units_sum;
 
-      // if burstcount width greater than byte address width within word
+      // if burstcount width greater than byte address width
       if( ( AMM_BURST_W - 1 ) > ADDR_B_W )
         begin
           // last byte address in transaction calculate
           assign burst_units_sum = ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount[ADDR_B_W - 1 : 0] );
 
-          // burstcount value calculate, remember if low burst enable
+          // burstcount value calculate
           always_comb
             if( storage_burst_en && low_bits_burst_en )
               burstcount_exp = ( burstcount[AMM_BURST_W - 2 : ADDR_B_W] + 1'b1  );
@@ -134,7 +134,7 @@ generate
           begin
             // define if all bytes can be transmitted in one word or not
             storage_burst_en  <= ( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount  >= DATA_B_W );
-            // define if low address bits are out of word bound
+            // if sum of low bits out of word bound
             // this case you need 2 transactin at least
             low_bits_burst_en <= burst_units_sum[ADDR_B_W];
           end
@@ -144,7 +144,6 @@ generate
         if( trans_valid_i && trans_ready_o )
           begin
             storage_struct.trans_type <= trans_type_i;
-            // latch only word address
             storage_struct.start_addr <= trans_addr_i[ADDR_W   - 1 : ADDR_B_W];
             storage_struct.start_off  <= trans_addr_i[ADDR_B_W - 1 :        0];
             storage_struct.end_off    <= ADDR_B_W'( trans_addr_i[ADDR_B_W - 1 : 0] + burstcount );
@@ -162,7 +161,7 @@ generate
         if( start_stb )
           cur_struct.end_off  <= storage_struct.end_off;
 
-      // create structure to compare module with necessary fields
+      // create structure for 'compare' module
       always_comb
         begin
           cmp_struct_o.start_addr   = storage_struct.start_addr;
@@ -180,7 +179,7 @@ generate
         if( start_stb )
           burstcount_o <= burstcount_exp + 1'b1;
 
-      // word aligne byte address
+      // word aligned byte address
       always_ff @( posedge clk_i )
         if( start_stb )
           address_o <= ( storage_struct.start_addr << ADDR_B_W );
@@ -286,6 +285,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( writedata_en && ( data_mode == RND_DATA ) )
       rnd_data <= { rnd_data[6 : 0], data_gen_bit };
 
+// check current write transaction enable strobe
 always_comb
   if( test_mode == WRITE_AND_CHECK )
     cmp_en_o = ( start_stb && ( !storage_struct.trans_type ) );
@@ -301,13 +301,11 @@ assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14
 // random value generation polynom 
 assign data_gen_bit         = ( rnd_data[7] ^ rnd_data[5] ^ rnd_data[4] ^ rnd_data[3] );
 
-// if block is in process or valid storage present then block is busy yet
+// if block is in process or pre-calculated storage is valid then block is busy yet
 assign trans_busy_o         = ( in_process || storage_valid );
 
-// if last transaction accepted or block is not busy then it is ready for transmition
 assign trans_ready_o        = ( start_stb || !in_process );
 
-// amm-writedata latch enable
 assign writedata_en         = ( start_stb     && ( !storage_struct.trans_type ) ) ||
                               ( wr_unit_stb   && ( !last_transaction          ) );
 

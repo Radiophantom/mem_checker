@@ -7,7 +7,6 @@ module mem_checker(
   input                               clk_mem_i,
 
   // Avalon-MM input interface
-
   input                               sys_read_i,
   input                               sys_write_i,
   input         [3  : 0]              sys_address_i,
@@ -30,26 +29,34 @@ module mem_checker(
   output logic  [DATA_B_W - 1 : 0]    mem_byteenable_o
 );
 
-logic [CSR_RD_REQ : CSR_TEST_START][31 : 0] csr_registers;
+//****************************************************************
+// Variables declaration
+//****************************************************************
 
-logic                   trans_valid;
-logic [ADDR_W - 1 : 0]  trans_addr;
-logic                   trans_type;
+logic         [CSR_RD_REQ : CSR_TEST_START][31 : 0] csr_registers;
 
-logic                   test_finish;
-logic                   test_result;
+logic                                               trans_valid;
+logic         [ADDR_W - 1 : 0]                      trans_addr;
+logic                                               trans_type;
 
-logic                   cmp_error;
-logic                   cmp_busy;
-logic                   trans_busy;
-logic                   meas_busy;
+logic                                               test_finish;
+logic                                               test_result;
 
-logic                   test_start;
+logic                                               cmp_error;
+logic                                               cmp_busy;
+logic                                               trans_busy;
+logic                                               meas_busy;
 
-logic                   cmp_en;
-cmp_struct_t            cmp_struct;
+logic                                               test_start;
 
-logic                   trans_ready;
+logic                                               cmp_en;
+cmp_struct_t                                        cmp_struct;
+
+logic                                               trans_ready;
+
+//****************************************************************
+// Modules instantiation
+//****************************************************************
 
 csr_block csr_block_inst( 
   .rst_sys_i        ( rst_sys_i                                     ),

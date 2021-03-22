@@ -244,7 +244,7 @@ assign next_addr_stb        = ( state == LOAD_S       ) || ( cnt_en_state && cmd
 assign test_count           = test_param_i[CSR_TEST_PARAM][31 : 16];
 assign test_mode            = test_mode_t'( test_param_i[CSR_TEST_PARAM][15 : 14] );
 
-// command accepted strobes
+// command accept strobes
 assign cmd_accepted_stb     = ( trans_valid_o   && trans_ready_i );
 assign last_transaction_stb = ( last_transaction && cmd_accepted_stb );
 
