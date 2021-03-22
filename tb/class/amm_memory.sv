@@ -148,7 +148,7 @@ local task automatic prep_wr_data(
         if( wr_data.byteenable[i] )
           begin
             if( insert_error && ( cur_trans_num == err_trans_num ) && ( byte_num == err_byte_num ) )
-              wr_byte = corrupt_data( wr_addr, amm_if_v.writedata[7 + i * 8 -: 8] );
+              wr_byte = corrupt_data( wr_addr, wr_data.writedata[7 + i * 8 -: 8] );
             else
               wr_byte = wr_data.writedata[7 + i * 8 -: 8];
             wr_data_channel.push_back( wr_byte );

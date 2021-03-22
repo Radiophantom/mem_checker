@@ -8,7 +8,7 @@ parameter int     MEM_DATA_B_W  = ( MEM_DATA_W / 8 );
 parameter int     AMM_ADDR_W    = 32;
 parameter int     AMM_DATA_W    = 512;
 // max value for AMM_BURST_W is 11, but 1 value is prohibited
-parameter int     AMM_BURST_W   = 11;
+parameter int     AMM_BURST_W   = 6;
 
 parameter int     DATA_B_W      = ( AMM_DATA_W / 8 );
 parameter int     ADDR_B_W      = $clog2( DATA_B_W );
