@@ -124,9 +124,9 @@ generate
 
           always_comb
             if( low_bits_burst_en )
-              burstcount_exp = (AMM_BURST_W - 2)'( 1 );
+              burstcount_exp = (AMM_BURST_W - 1)'( 1 );
             else
-              burstcount_exp = (AMM_BURST_W - 2)'( 0 );
+              burstcount_exp = (AMM_BURST_W - 1)'( 0 );
         end
 
       always_ff @( posedge clk_i )
